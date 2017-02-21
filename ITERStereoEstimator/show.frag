@@ -28,8 +28,8 @@ void main()
 	//colorOut = textureLod(Texture1, UV1, 0.0).rgb;
 	
 	float d1  = textureLod(TextureDepth, vec2(UV1.x, 0.5+UV1.y/2), 0.0).r;	
-	//colorOut = vec3(d1, d1, d1);	
-	
+	colorOut = vec3(d1, d1, d1);	
+	/*
 	
 	float grad = abs(color.g - 0.5) + abs(color.b - 0.5);
 	//if(grad > 0.01)
