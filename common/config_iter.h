@@ -23,6 +23,7 @@
 	CONFIG_PARAM(string, camera1_name, "config.camera1_name") \
 	CONFIG_PARAM(string, camera2_name, "config.camera2_name") \
 	CONFIG_PARAM_OPTIONAL(unsigned, camera_binning, "config.camera_binning", 1) \
+	CONFIG_PARAM_OPTIONAL(unsigned, exposure_time, "config.exposure_time", 15000) \
 	CONFIG_PARAM(float, minZ, "config.minZ") \
 	CONFIG_PARAM(float, maxZ, "config.maxZ") \
 	CONFIG_PARAM(int, layers, "config.layers") \

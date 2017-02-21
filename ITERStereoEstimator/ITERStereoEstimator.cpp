@@ -310,12 +310,14 @@ int main(int argc, char* argv[])
 		setFeature(camera1, feature1, "PixelFormat", "Mono8");
 		setFeature(camera1, feature1, "Width", config.frame_width);
 		setFeature(camera1, feature1, "Height", config.frame_height);
-		
+		setFeature(camera1, feature1, "ExposureTimeAbs", config.exposure_time);
+
 		setFeature(camera2, feature2, "BinningHorizontal", config.camera_binning);
 		setFeature(camera2, feature2, "BinningVertical", config.camera_binning);
 		setFeature(camera2, feature2, "PixelFormat", "Mono8");
 		setFeature(camera2, feature2, "Width", config.frame_width);
 		setFeature(camera2, feature2, "Height", config.frame_height);
+		setFeature(camera2, feature2, "ExposureTimeAbs", config.exposure_time);
 		
 		
 		VmbInt64_t PayloadSize = readFeature(camera1, feature1, "PayloadSize");		
@@ -333,15 +335,15 @@ int main(int argc, char* argv[])
 
 		std::unique_ptr<uint8_t[]> buffer3 = std::unique_ptr<uint8_t[]>(new uint8_t[PayloadSize*3+1]);
 		
-		
-		
+				
 		setFeature(camera1, feature1, "AcquisitionMode", "Continuous");
 		setFeature(camera1, feature1, "TriggerSource", "Software");
 		setFeature(camera1, feature1, "SyncOutSource", "Imaging");
-				
+						
 				
 		setFeature(camera2, feature2, "AcquisitionMode", "Continuous");
 		setFeature(camera2, feature2, "TriggerSource", "Line1");		
+		
 
 		// A list of frames for streaming. We chose to queue 2 frames.		
 		FramePtrVector frames1(config.buffer_frame_number), frames2(config.buffer_frame_number);
@@ -620,12 +622,9 @@ int main(int argc, char* argv[])
 			cout << goicp.optT << endl;
 			cout << "Finished in " << time << endl;
 
-
-
 			std::cout << " " << abc.x << " " << abc.y << " " << abc.z << " " << std::endl;
 			glfwSwapBuffers(window);
 			glfwPollEvents();			
-
 		}
 
 		glDisableVertexAttribArray(0);
