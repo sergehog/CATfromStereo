@@ -1,1 +1,0 @@
-﻿Edit and Continue : error  : 'ITERStereoEstimator.cpp' in 'ITERStereoEstimator.exe' was not linked with Edit and Continue enabled. Ensure that /INCREMENTAL linking is enabled, and the /EDITANDCONTINUE directive is not ignored.
