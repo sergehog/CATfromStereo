@@ -1,0 +1,24 @@
+# exclude everything except directory foo/bar
+ipch
+*.opensdf
+*.sdf
+*.suo
+*.dir
+*.vcxproj*
+*.sln
+Win32
+x64
+Debug
+Release
+MinSizeRel
+RelWithDebInfo
+CMake
+CMakeFiles
+*/CMake*
+*.xcodeproj
+doc
+docs
+*.cmake
+*.so
+*.obj
+*.VC.db
