@@ -45,7 +45,29 @@ glm::vec3 findMajourPlane(const POINT3D* const Points1, const int length, const 
 std::pair<float*, uint32_t> read_stl(const char * const filename);
 std::pair<POINT3D*, uint32_t> read_points(const char * const filename);
 
+GLuint loadProgramAndSetup(string vertex, string fragment, string geometry, const static config::config_iter config)
+{
+	const GLuint programID = config.geometry_shader.empty() ? LoadShaders(config.vertex_shader.c_str(), config.fragment_shader.c_str()) : Load3Shaders(config.vertex_shader.c_str(), config.geometry_shader.c_str(), config.fragment_shader.c_str());
+	glUseProgram(programID);
+	glUniform1f(glGetUniformLocation(programID, "minZ"), config.minZ);
+	glUniform1f(glGetUniformLocation(programID, "maxZ"), config.maxZ);
+	glUniform1ui(glGetUniformLocation(programID, "layers"), config.layers);
+	glUniform1ui(glGetUniformLocation(programID, "width"), config.frame_width);
+	glUniform1ui(glGetUniformLocation(programID, "height"), config.frame_height);
+	return programID;
+}
 
+GLuint createTexture(GLenum target, GLint mag_filter, GLint min_filter)
+{
+	GLuint textureID;
+	glGenTextures(1, &textureID);
+	glBindTexture(target, textureID);
+	glTexParameteri(target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(target, GL_TEXTURE_MAG_FILTER, mag_filter);
+	glTexParameteri(target, GL_TEXTURE_MIN_FILTER, min_filter);
+	return textureID;
+}
 
 int main(int argc, char* argv[])
 {
@@ -157,107 +179,81 @@ int main(int argc, char* argv[])
 		//glEnable(GL_DEPTH_TEST);
 		// Accept fragment if it closer to the camera than the former one
 		//glDepthFunc(GL_LESS);
+
 		checkGLError("GLEW Initializatiopn");		
 
-		const GLuint programID = config.geometry_shader.empty() ? LoadShaders(config.vertex_shader.c_str(), config.fragment_shader.c_str()) : Load3Shaders(config.vertex_shader.c_str(), config.geometry_shader.c_str(), config.fragment_shader.c_str());
-		glUseProgram(programID);
-		glUniform1f(glGetUniformLocation(programID, "minZ"), config.minZ);
-		glUniform1f(glGetUniformLocation(programID, "maxZ"), config.maxZ);
-		glUniform1ui(glGetUniformLocation(programID, "layers"), config.layers);
-		glUniform1ui(glGetUniformLocation(programID, "width"), config.frame_width);
-		glUniform1ui(glGetUniformLocation(programID, "height"), config.frame_height);				
-		glUniformMatrix4fv(glGetUniformLocation(programID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
+		// calculation of both cost volumes in a GL_TEXTURE_2D_ARRAY
+		const GLuint costvolProgramID = loadProgramAndSetup(config.vertex_shader, config.fragment_shader, config.geometry_shader, config);
+		glUniformMatrix4fv(glGetUniformLocation(costvolProgramID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
 
-		const GLuint mainProgramID = LoadShaders(config.main_vertex_shader.c_str(), config.main_fragment_shader.c_str());
-		glUseProgram(mainProgramID);
-		glUniform1f(glGetUniformLocation(mainProgramID, "minZ"), config.minZ);
-		glUniform1f(glGetUniformLocation(mainProgramID, "maxZ"), config.maxZ);
-		glUniform1ui(glGetUniformLocation(mainProgramID, "layers"), config.layers);
-		glUniform1ui(glGetUniformLocation(mainProgramID, "width"), config.frame_width);
-		glUniform1ui(glGetUniformLocation(mainProgramID, "height"), config.frame_height);
-		checkGLError("GLSL shader programs loading");
+		// aggregation and best depth selection (Winner-Takes-All)
+		const GLuint wtaProgramID = loadProgramAndSetup(config.main_vertex_shader, config.main_fragment_shader, "", config);
 
-		const GLuint showProgramID = LoadShaders(config.show_vertex_shader.c_str(), config.show_fragment_shader.c_str());
-		glUseProgram(showProgramID);
-		glUniform1f(glGetUniformLocation(showProgramID, "minZ"), config.minZ);
-		glUniform1f(glGetUniformLocation(showProgramID, "maxZ"), config.maxZ);
-		glUniform1ui(glGetUniformLocation(showProgramID, "layers"), config.layers);
-		glUniform1ui(glGetUniformLocation(showProgramID, "width"), config.frame_width);
-		glUniform1ui(glGetUniformLocation(showProgramID, "height"), config.frame_height);
-		glUniformMatrix4fv(glGetUniformLocation(showProgramID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
-		glUniformMatrix4fv(glGetUniformLocation(showProgramID, "C1C2inv"), 1, GL_FALSE, &C1C2inv[0][0]);
-		checkGLError("GLSL shader programs loading");
+		// Left-to-Right correspondance check + some heuristic filters
+		const GLuint l2rFilterProgramID = loadProgramAndSetup(config.depth_vertex_shader, config.depth_fragment_shader, "", config);
+		glUniformMatrix4fv(glGetUniformLocation(l2rFilterProgramID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
+		glUniformMatrix4fv(glGetUniformLocation(l2rFilterProgramID, "C1C2inv"), 1, GL_FALSE, &C1C2inv[0][0]);
 
-		//GLuint lookup1TextureID = prepare_lookup(camera1_pair.first, cam1_k1, cam1_k2, config.frame_width, config.frame_height);
-		//GLuint lookup2TextureID = prepare_lookup(camera2_pair.first, cam2_k1, cam2_k2, config.frame_width, config.frame_height);
-		//GLuint lookupInverseTextureID = prepare_lookup_inverse(camera1_pair.first, camera2_pair.first, cam1_k1, cam1_k2, cam2_k1, cam2_k2, config.frame_width, config.frame_height);		
+		const GLuint displayProgramID = loadProgramAndSetup(config.show_vertex_shader, config.show_fragment_shader, "", config);		
+		//glUniformMatrix4fv(glGetUniformLocation(showProgramID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
+		//glUniformMatrix4fv(glGetUniformLocation(showProgramID, "C1C2inv"), 1, GL_FALSE, &C1C2inv[0][0]);
+		checkGLError("GLSL Shader Programs loaded");
 
-		GLuint layerID = glGetUniformLocation(programID, "layer");
-		GLuint mainLayerID = glGetUniformLocation(mainProgramID, "layer");
+
+		//GLuint layerID = glGetUniformLocation(programID, "layer");
+		//GLuint mainLayerID = glGetUniformLocation(mainProgramID, "layer");
 
 		GLuint vao;
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);		
 
-		// The framebuffer, which regroups 0, 1, or more textures, and 0 or 1 depth buffer.
-		GLuint framebufferID = 0;
-		glGenFramebuffers(1, &framebufferID);
-		glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
-		
-		// The texture we're going to render to
-		GLuint renderedTextureID;
-		glGenTextures(1, &renderedTextureID);
 
-		// "Bind" the newly created texture : all future texture functions will modify this texture
-		glBindTexture(GL_TEXTURE_2D_ARRAY, renderedTextureID);
-		
-		// Texture filtering
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		///////////////////////////////////// FIRST FRAMEBUFFER ///////////////////////////////////////
+		// The framebuffer, which regroups 0, 1, or more textures, and 0 or 1 depth buffer.
+		GLuint costvolFramebufferID;
+		glGenFramebuffers(1, &costvolFramebufferID);
+		glBindFramebuffer(GL_FRAMEBUFFER, costvolFramebufferID);		
+		GLuint costvolTextureID = createTexture(GL_TEXTURE_2D_ARRAY, GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
+		//// The texture we're going to render to
+		//glGenTextures(1, &costvolTextureID);
+		//// "Bind" the newly created texture : all future texture functions will modify this texture
+		//glBindTexture(GL_TEXTURE_2D_ARRAY, costvolTextureID);		
+		//// Texture filtering
+		//glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		//glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		//glTexStorage3D(GL_TEXTURE_2D_ARRAY, 10, GL_RGB32F, config.frame_width, config.frame_height, config.layers);
 		glTexStorage3D(GL_TEXTURE_2D_ARRAY, 5, GL_R16, config.frame_width, config.frame_height*2, config.layers);
-		
-
 		// Set "renderedTexture" as our colour attachement #0
-		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, renderedTextureID, 0);
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, costvolTextureID, 0);
 		checkGLError("Render-to-Texture Framebuffer creation");
-
 		//GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
 		GLenum drawBuffer =  GL_COLOR_ATTACHMENT0 ;
 		glDrawBuffers(1, &drawBuffer); // "1" is the size of DrawBuffers
-
 		// check either our framebuffer is ok
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 		{
-			throw std::exception("Framebuffer is not OK!");
+			throw std::exception("Framebuffer #1 is not OK!");
 		}		
 
-		///////////////////////////////////// SECOND FRAMEBUFFER
-		
-		GLuint framebuffer2ID = 0;
-		glGenFramebuffers(1, &framebuffer2ID);
-		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer2ID);
-		
-		// The texture we're going to render to
-		GLuint renderedTexture2ID;
-		glGenTextures(1, &renderedTexture2ID);
-
-		// "Bind" the newly created texture : all future texture functions will modify this texture
-		glBindTexture(GL_TEXTURE_2D, renderedTexture2ID);
-
-		// Texture filtering
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		///////////////////////////////////// SECOND FRAMEBUFFER ///////////////////////////////////////
+		GLuint depthFramebufferID;
+		glGenFramebuffers(1, &depthFramebufferID);
+		glBindFramebuffer(GL_FRAMEBUFFER, depthFramebufferID);
+		GLuint depthTextureID = createTexture(GL_TEXTURE_2D, GL_LINEAR, GL_LINEAR);
+		//glGenTextures(1, &depthTextureID);
+		//// "Bind" the newly created texture : all future texture functions will modify this texture
+		//glBindTexture(GL_TEXTURE_2D, depthTextureID);
+		//// Texture filtering
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R8, config.frame_width, config.frame_height * 2);
-
 		// Set "renderedTexture" as our colour attachement #0
-		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, renderedTexture2ID, 0);
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, depthTextureID, 0);
 		checkGLError("Render-to-Texture Framebuffer 2 creation");
-
 		//GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
 		drawBuffer = GL_COLOR_ATTACHMENT0;
 		glDrawBuffers(1, &drawBuffer); // "1" is the size of DrawBuffers
@@ -265,10 +261,34 @@ int main(int argc, char* argv[])
 									   // check either our framebuffer is ok
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 		{
-			throw std::exception("Framebuffer is not OK!");
+			throw std::exception("Framebuffer#2 is not OK!");
 		}
 
-		// Two triangles are always the same, so can be initialized just one in advance				
+		///////////////////////////////////// THIRD FRAMEBUFFER	//////////////////////////////////////////	
+		GLuint pointsFramebufferID;
+		glGenFramebuffers(1, &pointsFramebufferID);
+		glBindFramebuffer(GL_FRAMEBUFFER, pointsFramebufferID);
+		GLuint pointsTextureID = createTexture(GL_TEXTURE_2D, GL_LINEAR, GL_LINEAR);
+		//glGenTextures(1, &pointsTextureID);
+		//glBindTexture(GL_TEXTURE_2D, pointsTextureID);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R8, config.frame_width, config.frame_height);
+		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, pointsTextureID, 0);
+		checkGLError("Render-to-Texture Framebuffer 2 creation");
+		//GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
+		drawBuffer = GL_COLOR_ATTACHMENT0;
+		glDrawBuffers(1, &drawBuffer); // "1" is the size of DrawBuffers
+		// check either our framebuffer is ok
+		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+		{
+			throw std::exception("Framebuffer #3 is not OK!");
+		}
+
+
+		// Two triangles are always the same, so can be initialized just once in advance				
 		GLuint elementbuffer, uvbuffer;
 		GLuint index_buffer[] = {0, 1, 3, 1, 2, 3};
 		GLint uv_buffer[] = {0, 0, config.frame_width, 0, config.frame_width, config.frame_height, 0, config.frame_height};
@@ -280,22 +300,31 @@ int main(int argc, char* argv[])
 		glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
 		glBufferData(GL_ARRAY_BUFFER, sizeof(uv_buffer), uv_buffer, GL_STATIC_DRAW);
 		
-		GLuint texture1ID, texture2ID;
-		glGenTextures(1, &texture1ID);
-		glBindTexture(GL_TEXTURE_2D, texture1ID);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		// STL model is also static
+		GLuint modelbuffer;
+		glGenBuffers(1, &modelbuffer);
+		glBindBuffer(GL_ARRAY_BUFFER, modelbuffer);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float)*model_triangles*3, model_vertices.get(), GL_STATIC_DRAW);		
+		
+		GLuint texture1ID = createTexture(GL_TEXTURE_2D, GL_LINEAR, GL_LINEAR);
+		GLuint texture2ID = createTexture(GL_TEXTURE_2D, GL_LINEAR, GL_LINEAR);
 
-		glGenTextures(1, &texture2ID);
-		glBindTexture(GL_TEXTURE_2D, texture2ID);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+		//GLuint texture1ID, texture2ID;
+		//glGenTextures(1, &texture1ID);
+		//glBindTexture(GL_TEXTURE_2D, texture1ID);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		////glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+		//glGenTextures(1, &texture2ID);
+		//glBindTexture(GL_TEXTURE_2D, texture2ID);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		////glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		checkGLError("Buffers and Textures init");
 		
 		CameraPtr camera1, camera2;		
@@ -310,14 +339,14 @@ int main(int argc, char* argv[])
 		setFeature(camera1, feature1, "PixelFormat", "Mono8");
 		setFeature(camera1, feature1, "Width", config.frame_width);
 		setFeature(camera1, feature1, "Height", config.frame_height);
-		setFeature(camera1, feature1, "ExposureTimeAbs", config.exposure_time);
+		setFeatureDouble(camera1, feature1, "ExposureTimeAbs", config.exposure_time);
 
 		setFeature(camera2, feature2, "BinningHorizontal", config.camera_binning);
 		setFeature(camera2, feature2, "BinningVertical", config.camera_binning);
 		setFeature(camera2, feature2, "PixelFormat", "Mono8");
 		setFeature(camera2, feature2, "Width", config.frame_width);
 		setFeature(camera2, feature2, "Height", config.frame_height);
-		setFeature(camera2, feature2, "ExposureTimeAbs", config.exposure_time);
+		setFeatureDouble(camera2, feature2, "ExposureTimeAbs", config.exposure_time);
 		
 		
 		VmbInt64_t PayloadSize = readFeature(camera1, feature1, "PayloadSize");		
@@ -466,9 +495,9 @@ int main(int argc, char* argv[])
 
 			
 			// Camera 1 
-			glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
+			glBindFramebuffer(GL_FRAMEBUFFER, costvolFramebufferID);
 			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			glUseProgram(programID);
+			glUseProgram(costvolProgramID);
 			glViewport(0, 0, config.frame_width, config.frame_height);
 
 			glActiveTexture(GL_TEXTURE0);
@@ -481,11 +510,11 @@ int main(int argc, char* argv[])
 			glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
 			glVertexAttribIPointer(0, 2, GL_INT, 0, (void*)0);
 
-			glUniform1i(glGetUniformLocation(programID, "Texture1"), 0);
-			glUniform1i(glGetUniformLocation(programID, "Texture2"), 1);
+			glUniform1i(glGetUniformLocation(costvolProgramID, "Texture1"), 0);
+			glUniform1i(glGetUniformLocation(costvolProgramID, "Texture2"), 1);
 
 			//glViewport(0, 0, config.frame_width, config.frame_height);
-			glUniformMatrix4fv(glGetUniformLocation(programID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
+			glUniformMatrix4fv(glGetUniformLocation(costvolProgramID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
 			glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0, config.layers);
 
 			////// Right Camera Cost Volume
@@ -502,20 +531,20 @@ int main(int argc, char* argv[])
 			glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
 			glVertexAttribIPointer(0, 2, GL_INT, 0, (void*)0);
 
-			glUniform1i(glGetUniformLocation(programID, "Texture1"), 0);
-			glUniform1i(glGetUniformLocation(programID, "Texture2"), 1);
+			glUniform1i(glGetUniformLocation(costvolProgramID, "Texture1"), 0);
+			glUniform1i(glGetUniformLocation(costvolProgramID, "Texture2"), 1);
 
 			//glViewport(0, 0, config.frame_width, config.frame_height);
-			glUniformMatrix4fv(glGetUniformLocation(programID, "C2C1inv"), 1, GL_FALSE, &C1C2inv[0][0]);
+			glUniformMatrix4fv(glGetUniformLocation(costvolProgramID, "C2C1inv"), 1, GL_FALSE, &C1C2inv[0][0]);
 			glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0, config.layers);
 
 			glDisableVertexAttribArray(0);
 
 			///////////////////////////////  SECOND FRAMEBUFFER
 
-			glBindFramebuffer(GL_FRAMEBUFFER, framebuffer2ID);
+			glBindFramebuffer(GL_FRAMEBUFFER, depthFramebufferID);
 			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			glUseProgram(mainProgramID);			
+			glUseProgram(wtaProgramID);			
 			//glViewport(0, config.frame_height, config.frame_width, config.frame_height);
 			glViewport(0, 0, config.frame_width, config.frame_height*2);
 
@@ -526,16 +555,16 @@ int main(int argc, char* argv[])
 			glBindTexture(GL_TEXTURE_2D, texture2ID);
 
 			glActiveTexture(GL_TEXTURE2);
-			glBindTexture(GL_TEXTURE_2D_ARRAY, renderedTextureID);
+			glBindTexture(GL_TEXTURE_2D_ARRAY, costvolTextureID);
 			glGenerateMipmap(GL_TEXTURE_2D_ARRAY);
 
 			glEnableVertexAttribArray(0);
 			glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
 			glVertexAttribIPointer(0, 2, GL_INT, 0, (void*)0);
 
-			glUniform1i(glGetUniformLocation(mainProgramID, "Texture1"), 0);
-			glUniform1i(glGetUniformLocation(mainProgramID, "Texture2"), 1);
-			glUniform1i(glGetUniformLocation(mainProgramID, "TextureCost"), 2);
+			glUniform1i(glGetUniformLocation(wtaProgramID, "Texture1"), 0);
+			glUniform1i(glGetUniformLocation(wtaProgramID, "Texture2"), 1);
+			glUniform1i(glGetUniformLocation(wtaProgramID, "TextureCost"), 2);
 
 			
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0);
@@ -546,7 +575,7 @@ int main(int argc, char* argv[])
 
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			glUseProgram(showProgramID);
+			glUseProgram(displayProgramID);
 			//glViewport(0, config.frame_height, config.frame_width, config.frame_height);
 			glViewport(0, 0, config.screen_width, config.screen_height);
 
@@ -557,16 +586,16 @@ int main(int argc, char* argv[])
 			glBindTexture(GL_TEXTURE_2D, texture2ID);
 
 			glActiveTexture(GL_TEXTURE2);
-			glBindTexture(GL_TEXTURE_2D, renderedTexture2ID);
+			glBindTexture(GL_TEXTURE_2D, depthTextureID);
 			//glGenerateMipmap(GL_TEXTURE);
 
 			glEnableVertexAttribArray(0);
 			glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
 			glVertexAttribIPointer(0, 2, GL_INT, 0, (void*)0);
 
-			glUniform1i(glGetUniformLocation(showProgramID, "Texture1"), 0);
-			glUniform1i(glGetUniformLocation(showProgramID, "Texture2"), 1);
-			glUniform1i(glGetUniformLocation(showProgramID, "TextureDepth"), 2);
+			glUniform1i(glGetUniformLocation(displayProgramID, "Texture1"), 0);
+			glUniform1i(glGetUniformLocation(displayProgramID, "Texture2"), 1);
+			glUniform1i(glGetUniformLocation(displayProgramID, "TextureDepth"), 2);
 
 
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0);
@@ -596,6 +625,7 @@ int main(int argc, char* argv[])
 
 			std::cout << "major plane: (" << length << ") / ";
 			vec3 abc = findMajourPlane(Points1.get(), length, config.plane_threshold);
+			std::cout << " " << abc.x << " " << abc.y << " " << abc.z << " " << std::endl;
 
 			int k = 0;
 			for (int i = 0; i < length; i++)
@@ -622,7 +652,7 @@ int main(int argc, char* argv[])
 			cout << goicp.optT << endl;
 			cout << "Finished in " << time << endl;
 
-			std::cout << " " << abc.x << " " << abc.y << " " << abc.z << " " << std::endl;
+			
 			glfwSwapBuffers(window);
 			glfwPollEvents();			
 		}
@@ -633,10 +663,10 @@ int main(int argc, char* argv[])
 		glDeleteVertexArrays(1, &vao);
 		glDeleteTextures(1, &texture1ID);
 		glDeleteTextures(1, &texture2ID);
-		glDeleteTextures(1, &renderedTextureID);		
-		glDeleteProgram(programID);
-		glDeleteProgram(mainProgramID);
-		glDeleteFramebuffers(1, &framebufferID);
+		glDeleteTextures(1, &costvolTextureID);		
+		glDeleteProgram(costvolProgramID);
+		glDeleteProgram(wtaProgramID);
+		glDeleteFramebuffers(1, &costvolFramebufferID);
 		
 		runCommand(camera1, feature1, "AcquisitionStop");
 		runCommand(camera2, feature2, "AcquisitionStop");
@@ -784,7 +814,7 @@ glm::vec3 findMajourPlane(const POINT3D* const Points1, const int length, const 
 
 	for (int i = 0; i < 1000; i++)
 	{
-		float number = 0;
+		
 		int i1 = rand() % length;
 		int i2 = i1;
 		while (i2 == i1)
@@ -803,8 +833,9 @@ glm::vec3 findMajourPlane(const POINT3D* const Points1, const int length, const 
 
 		mat3 XY1 = glm::transpose(mat3(xy1a, xy1b, xy1c));
 		vec3 abc = glm::inverse(XY1)*vec3(Points1[i1].z, Points1[i2].z, Points1[i3].z);
-
-
+		
+		int number = 0;
+		#pragma omp parallel for reduction(+:number)
 		for (int j = 0; j < length; j++)
 		{
 			float zj = glm::dot(abc, vec3(Points1[j].x, Points1[j].y, 1));
