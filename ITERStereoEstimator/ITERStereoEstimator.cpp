@@ -32,7 +32,8 @@
 #include "../common/vimba_helper.h"
 #include "../common/frame_observer.h"
 
-#include "../GoICP/jly_goicp.h"
+//#include "../GoICP/jly_goicp.h"
+#include "../goicp/goicp.hh"
 
 using namespace AVT::VmbAPI;
 using namespace std::chrono_literals;
@@ -77,6 +78,7 @@ int main(int argc, char* argv[])
 	VimbaSystem &system = VimbaSystem::GetInstance();
 
 	//int ret_code = 0;	
+	const float scale = 1000.f;
 
 	try
 	{
@@ -95,20 +97,27 @@ int main(int argc, char* argv[])
 		const std::pair<const mat3, const mat4x3> camera2_pair = config::camera_loader::read_settings2(config.camera_file, config.camera2_name, cam2_k1, cam2_k2);
 						
 
-		glm::mat4 C1(camera1_pair.first * camera1_pair.second);
-		glm::mat4 C2(camera2_pair.first * camera2_pair.second);
-		glm::mat4 C1inv = glm::inverse(C1);
-		glm::mat4 C2C1inv = C2*glm::inverse(C1);
-		glm::mat4 C1C2inv = C1*glm::inverse(C2);
+		const glm::mat4 C1(camera1_pair.first * camera1_pair.second);
+		const glm::mat4 C2(camera2_pair.first * camera2_pair.second);
+		const glm::mat4 C1inv = glm::inverse(C1);
+		const glm::mat4 C2C1inv = C2*glm::inverse(C1);
+		const glm::mat4 C1C2inv = C1*glm::inverse(C2);
 		//C1[3][3] = 1;
-		
+		const glm::mat4 Scale(scale, 0.f, 0.f, 0.f, 0.f, scale, 0.f, 0.f, 0.f, 0.f, scale, 0.f, 0.f, 0.f, 0.f, 1.f);
+		const glm::mat4 ScaleInv = glm::inverse(Scale);
+
 		std::pair<float*, uint32_t> stl_pair = read_stl(config.stl_file.c_str());
 		std::unique_ptr<float[]> model_vertices(stl_pair.first);
 		uint32_t model_triangles = stl_pair.second;
 		std::pair<POINT3D*, uint32_t> points_pair = read_points(config.points_file.c_str());
 		std::unique_ptr<POINT3D[]> pModel(points_pair.first);
 		std::unique_ptr<POINT3D[]> Points1 = std::unique_ptr<POINT3D[]>(new POINT3D[config.frame_width*config.frame_height+1]);
-
+		for(long i=0; i<points_pair.second; i++)
+		{
+			pModel[i].x /= scale;
+			pModel[i].y /= scale;
+			pModel[i].z /= scale;
+		}
 		GoICP goicp;
 		goicp.MSEThresh = 5;
 		goicp.trimFraction = 0.2;
@@ -121,12 +130,12 @@ int main(int argc, char* argv[])
 		goicp.dt.expandFactor = 2.f;// config.getF("distTransExpandFactor");
 
 
-		//clock_t  clockBegin, clockEnd;
-		//std::cout << "Building Distance Transform..." << flush;
-		//clockBegin = clock();
-		//goicp.BuildDT();
-		//clockEnd = clock();
-		//std::cout << (double)(clockEnd - clockBegin) / CLOCKS_PER_SEC << "s (CPU)" << endl;
+		clock_t  clockBegin, clockEnd;
+		std::cout << "Building Distance Transform..." << flush;
+		clockBegin = clock();
+		goicp.BuildDT();
+		clockEnd = clock();
+		std::cout << (double)(clockEnd - clockBegin) / CLOCKS_PER_SEC << "s (CPU)" << endl;
 
 
 		checkStatus(system.Startup());
@@ -176,7 +185,7 @@ int main(int argc, char* argv[])
 		//glClearColor(0.9f, 0.9f, 0.0f, 0.0f);
 		
 
-		checkGLError("GLEW Initializatiopn");		
+		checkGLError("GLEW Initialization");		
 
 		// calculation of both cost volumes in a GL_TEXTURE_2D_ARRAY
 		const GLuint costvolProgramID = loadProgramAndSetup(config.vertex_shader, config.fragment_shader, config.geometry_shader, config);
@@ -601,8 +610,12 @@ int main(int argc, char* argv[])
 			checkGLError("glReadPixels Error");
 
 			int length = 0;
+			POINT3D average;
+			average.x = 0;
+			average.y = 0;
+			average.z = 0;
 			for (int i = 0; i < HW; i++)
-			{				
+			{
 				const float d = buffer3[i * 3];
 				if (d > 0.f)
 				{
@@ -613,9 +626,27 @@ int main(int argc, char* argv[])
 					Points1[length].x = xyz.x;
 					Points1[length].y = xyz.y;
 					Points1[length].z = xyz.z;
+
+					average.x += xyz.x;
+					average.y += xyz.y;
+					average.z += xyz.z;
 					length++;
 				}
 			}
+			average.x /= length;
+			average.y /= length;
+			average.z /= length;
+			#pragma omp parallel for
+			for (int i = 0; i < length; i++)
+			{
+				Points1[i].x = (Points1[i].x - average.x) / scale;
+				Points1[i].y = (Points1[i].y - average.y) / scale;
+				Points1[i].z = (Points1[i].z - average.z) / scale;
+			}
+			
+			glm::mat4 Translate = glm::mat4(1.0);
+			Translate[3] = vec4(-average.x, -average.y, -average.z, 0.f);
+
 
 			//std::cout << "major plane: (" << length << ") / ";
 			//vec3 abc = findMajourPlane(Points1.get(), length, config.plane_threshold);
@@ -640,12 +671,24 @@ int main(int argc, char* argv[])
 			goicp.Register();
 			clock_t clockEnd = clock();
 			double timea = (double)(clockEnd - clockBegin) / CLOCKS_PER_SEC;
-			cout << "Optimal Rotation Matrix:" << endl;
-			cout << goicp.optR << endl;
-			cout << "Optimal Translation Vector:" << endl;
-			cout << goicp.optT << endl;
-			cout << "Finished in " << timea << endl;
-			glm::mat4 Transform();
+			//cout << "Optimal Rotation Matrix:" << endl;
+			//cout << goicp.optR << endl;
+			//cout << "Optimal Translation Vector:" << endl;
+			//cout << goicp.optT << endl;
+			//cout << "Finished in " << timea << endl;
+			
+			float a[] = {goicp.optR(0, 0), goicp.optR(1, 0), goicp.optR(2, 0), 0.0,  goicp.optR(0, 1), goicp.optR(1, 1), goicp.optR(2, 1), 0.f, goicp.optR(0, 2), goicp.optR(1, 2), goicp.optR(2, 2), 0.0, goicp.optT(0), goicp.optT(1), goicp.optT(2), 1.0 };
+			glm::mat4 Transform(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12], a[13], a[14], a[15]);
+			
+			Transform = glm::inverse(Translate)*(ScaleInv*Transform*Scale);
+			Transform = glm::inverse(Transform);
+			std::cout << Transform[0].x << Transform[1].x << Transform[2].x << Transform[3].x << std::endl;
+			std::cout << Transform[0].y << Transform[1].y << Transform[2].y << Transform[3].y << std::endl;
+			std::cout << Transform[0].z << Transform[1].z << Transform[2].z << Transform[3].z << std::endl;
+			std::cout << Transform[0].w << Transform[1].w << Transform[2].w << Transform[3].w << std::endl;
+
+
+			//glm::mat3 Transform();
 			//////////////////////  SCREEN FRAMEBUFFER DISPLAY ALIGNED MODEL
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

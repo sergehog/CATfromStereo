@@ -18,6 +18,7 @@ CMakeFiles
 *.xcodeproj
 doc
 docs
+eigen-bin
 *.cmake
 *.so
 *.obj
