@@ -175,10 +175,6 @@ int main(int argc, char* argv[])
 		// Crappy color to clearly see non-rendered areas
 		//glClearColor(0.9f, 0.9f, 0.0f, 0.0f);
 		
-		// Enable depth test		
-		//glEnable(GL_DEPTH_TEST);
-		// Accept fragment if it closer to the camera than the former one
-		//glDepthFunc(GL_LESS);
 
 		checkGLError("GLEW Initializatiopn");		
 
@@ -195,8 +191,7 @@ int main(int argc, char* argv[])
 		glUniformMatrix4fv(glGetUniformLocation(l2rFilterProgramID, "C1C2inv"), 1, GL_FALSE, &C1C2inv[0][0]);
 
 		const GLuint displayProgramID = loadProgramAndSetup(config.show_vertex_shader, config.show_fragment_shader, "", config);		
-		//glUniformMatrix4fv(glGetUniformLocation(showProgramID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
-		//glUniformMatrix4fv(glGetUniformLocation(showProgramID, "C1C2inv"), 1, GL_FALSE, &C1C2inv[0][0]);
+		glUniformMatrix4fv(glGetUniformLocation(l2rFilterProgramID, "C1"), 1, GL_FALSE, &C1[0][0]);
 		checkGLError("GLSL Shader Programs loaded");
 
 
@@ -493,8 +488,10 @@ int main(int argc, char* argv[])
 			triggered = time(NULL);
 			std::cout << triggered << " Triggered Frames normally" << std::endl;			
 
-			
-			// Camera 1 
+			// turn on the indexing 
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
+			/////////////////////////////////////// FIRST FRAMEBUFFER - COST VOLUME /////////////////////
+			///// Camera 1 Cost Volume
 			glBindFramebuffer(GL_FRAMEBUFFER, costvolFramebufferID);
 			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glUseProgram(costvolProgramID);
@@ -517,8 +514,7 @@ int main(int argc, char* argv[])
 			glUniformMatrix4fv(glGetUniformLocation(costvolProgramID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
 			glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0, config.layers);
 
-			////// Right Camera Cost Volume
-
+			////// Camera 2 Cost Volume
 			glViewport(0, config.frame_height, config.frame_width, config.frame_height);
 
 			glActiveTexture(GL_TEXTURE0);
@@ -540,12 +536,13 @@ int main(int argc, char* argv[])
 
 			glDisableVertexAttribArray(0);
 
-			///////////////////////////////  SECOND FRAMEBUFFER
+			///////////////////////////////  SECOND FRAMEBUFFER - WTA (DEPTH ESTIMATION) //////////////
 
 			glBindFramebuffer(GL_FRAMEBUFFER, depthFramebufferID);
-			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glUseProgram(wtaProgramID);			
 			//glViewport(0, config.frame_height, config.frame_width, config.frame_height);
+			// works for both cameras at once
 			glViewport(0, 0, config.frame_width, config.frame_height*2);
 
 			glActiveTexture(GL_TEXTURE0);
@@ -570,12 +567,10 @@ int main(int argc, char* argv[])
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0);
 			glDisableVertexAttribArray(0);
 
-			//////////////////////  DRAW ON A SCREEN
-
-
-			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			//////////////////////  THIRD FRAMEBUFFER = LEFT2RIGHT CHECK + REMOVING OUTLIERS (FILTERING) ////////////
+			glBindFramebuffer(GL_FRAMEBUFFER, pointsFramebufferID);
 			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			glUseProgram(displayProgramID);
+			glUseProgram(l2rFilterProgramID);
 			//glViewport(0, config.frame_height, config.frame_width, config.frame_height);
 			glViewport(0, 0, config.screen_width, config.screen_height);
 
@@ -593,19 +588,17 @@ int main(int argc, char* argv[])
 			glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
 			glVertexAttribIPointer(0, 2, GL_INT, 0, (void*)0);
 
-			glUniform1i(glGetUniformLocation(displayProgramID, "Texture1"), 0);
-			glUniform1i(glGetUniformLocation(displayProgramID, "Texture2"), 1);
-			glUniform1i(glGetUniformLocation(displayProgramID, "TextureDepth"), 2);
-
-
+			glUniform1i(glGetUniformLocation(l2rFilterProgramID, "Texture1"), 0);
+			glUniform1i(glGetUniformLocation(l2rFilterProgramID, "Texture2"), 1);
+			glUniform1i(glGetUniformLocation(l2rFilterProgramID, "TextureDepth"), 2);
+			
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0);
-			glDisableVertexAttribArray(0);
-
-			
-			checkGLError("Iteration Frame 3");
-			
+			glDisableVertexAttribArray(0);			
+			checkGLError("Iteration Frame 3");			
 			
 			glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer3.get());
+			checkGLError("glReadPixels Error");
+
 			int length = 0;
 			for (int i = 0; i < HW; i++)
 			{				
@@ -651,6 +644,34 @@ int main(int argc, char* argv[])
 			cout << "Optimal Translation Vector:" << endl;
 			cout << goicp.optT << endl;
 			cout << "Finished in " << time << endl;
+
+			//////////////////////  SCREEN FRAMEBUFFER DISPLAY ALIGNED MODEL
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+			
+			// Enable depth test		
+			glEnable(GL_DEPTH_TEST);
+			// Accept fragment if it closer to the camera than the former one
+			glDepthFunc(GL_LESS);
+
+			glUseProgram(displayProgramID);
+			//glViewport(0, config.frame_height, config.frame_width, config.frame_height);
+			glViewport(0, 0, config.screen_width, config.screen_height);
+
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, texture1ID);
+
+			glEnableVertexAttribArray(0);
+			glBindBuffer(GL_ARRAY_BUFFER, modelbuffer);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_TRUE, 0, (void*)0);
+			glm::mat4 Transform(1,0,0,0,0,1,0,0,0,0,1,0,0,0,1000,1);
+			glUniformMatrix4fv(glGetUniformLocation(l2rFilterProgramID, "Transform"), 1, GL_FALSE, &Transform[0][0]);
+			glUniform1i(glGetUniformLocation(displayProgramID, "Texture1"), 0);
+			// turn off the indexing  (it's easier for STL rendering)
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0);
+
+			glDisableVertexAttribArray(0);
 
 			
 			glfwSwapBuffers(window);
