@@ -47,7 +47,7 @@ std::pair<POINT3D*, uint32_t> read_points(const char * const filename);
 
 GLuint loadProgramAndSetup(string vertex, string fragment, string geometry, const static config::config_iter config)
 {
-	const GLuint programID = config.geometry_shader.empty() ? LoadShaders(config.vertex_shader.c_str(), config.fragment_shader.c_str()) : Load3Shaders(config.vertex_shader.c_str(), config.geometry_shader.c_str(), config.fragment_shader.c_str());
+	const GLuint programID = geometry.empty() ? LoadShaders(vertex.c_str(), fragment.c_str()) : Load3Shaders(vertex.c_str(), geometry.c_str(), fragment.c_str());
 	glUseProgram(programID);
 	glUniform1f(glGetUniformLocation(programID, "minZ"), config.minZ);
 	glUniform1f(glGetUniformLocation(programID, "maxZ"), config.maxZ);
@@ -121,12 +121,12 @@ int main(int argc, char* argv[])
 		goicp.dt.expandFactor = 2.f;// config.getF("distTransExpandFactor");
 
 
-		clock_t  clockBegin, clockEnd;
-		cout << "Building Distance Transform..." << flush;
-		clockBegin = clock();
-		goicp.BuildDT();
-		clockEnd = clock();
-		cout << (double)(clockEnd - clockBegin) / CLOCKS_PER_SEC << "s (CPU)" << endl;
+		//clock_t  clockBegin, clockEnd;
+		//std::cout << "Building Distance Transform..." << flush;
+		//clockBegin = clock();
+		//goicp.BuildDT();
+		//clockEnd = clock();
+		//std::cout << (double)(clockEnd - clockBegin) / CLOCKS_PER_SEC << "s (CPU)" << endl;
 
 
 		checkStatus(system.Startup());
@@ -191,7 +191,8 @@ int main(int argc, char* argv[])
 		glUniformMatrix4fv(glGetUniformLocation(l2rFilterProgramID, "C1C2inv"), 1, GL_FALSE, &C1C2inv[0][0]);
 
 		const GLuint displayProgramID = loadProgramAndSetup(config.show_vertex_shader, config.show_fragment_shader, "", config);		
-		glUniformMatrix4fv(glGetUniformLocation(l2rFilterProgramID, "C1"), 1, GL_FALSE, &C1[0][0]);
+		glUniformMatrix4fv(glGetUniformLocation(displayProgramID, "C1"), 1, GL_FALSE, &C1[0][0]);
+		const GLuint display2ProgramID = loadProgramAndSetup(config.show2_vertex_shader, config.show2_fragment_shader, "", config);		
 		checkGLError("GLSL Shader Programs loaded");
 
 
@@ -202,9 +203,26 @@ int main(int argc, char* argv[])
 		glGenVertexArrays(1, &vao);
 		glBindVertexArray(vao);		
 
+		// Two triangles are always the same, so can be initialized just once in advance				
+		GLuint elementbuffer, uvbuffer;
+		GLuint index_buffer[] = { 0, 1, 3, 1, 2, 3 };
+		GLint uv_buffer[] = { 0, 0, config.frame_width, 0, config.frame_width, config.frame_height, 0, config.frame_height };
+		glGenBuffers(1, &elementbuffer);
+		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
+		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer), index_buffer, GL_STATIC_DRAW);
+
+		glGenBuffers(1, &uvbuffer);
+		glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(uv_buffer), uv_buffer, GL_STATIC_DRAW);
+
+		// STL model is also static
+		GLuint modelbuffer;
+		glGenBuffers(1, &modelbuffer);
+		glBindBuffer(GL_ARRAY_BUFFER, modelbuffer);
+		glBufferData(GL_ARRAY_BUFFER, sizeof(float)*model_triangles*9, model_vertices.get(), GL_STATIC_DRAW);
+
 
 		///////////////////////////////////// FIRST FRAMEBUFFER ///////////////////////////////////////
-		// The framebuffer, which regroups 0, 1, or more textures, and 0 or 1 depth buffer.
 		GLuint costvolFramebufferID;
 		glGenFramebuffers(1, &costvolFramebufferID);
 		glBindFramebuffer(GL_FRAMEBUFFER, costvolFramebufferID);		
@@ -236,7 +254,7 @@ int main(int argc, char* argv[])
 		GLuint depthFramebufferID;
 		glGenFramebuffers(1, &depthFramebufferID);
 		glBindFramebuffer(GL_FRAMEBUFFER, depthFramebufferID);
-		GLuint depthTextureID = createTexture(GL_TEXTURE_2D, GL_LINEAR, GL_LINEAR);
+		GLuint depthTextureID = createTexture(GL_TEXTURE_2D, GL_NEAREST, GL_NEAREST);
 		//glGenTextures(1, &depthTextureID);
 		//// "Bind" the newly created texture : all future texture functions will modify this texture
 		//glBindTexture(GL_TEXTURE_2D, depthTextureID);
@@ -263,7 +281,7 @@ int main(int argc, char* argv[])
 		GLuint pointsFramebufferID;
 		glGenFramebuffers(1, &pointsFramebufferID);
 		glBindFramebuffer(GL_FRAMEBUFFER, pointsFramebufferID);
-		GLuint pointsTextureID = createTexture(GL_TEXTURE_2D, GL_LINEAR, GL_LINEAR);
+		GLuint pointsTextureID = createTexture(GL_TEXTURE_2D, GL_NEAREST, GL_NEAREST);
 		//glGenTextures(1, &pointsTextureID);
 		//glBindTexture(GL_TEXTURE_2D, pointsTextureID);
 		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -281,25 +299,6 @@ int main(int argc, char* argv[])
 		{
 			throw std::exception("Framebuffer #3 is not OK!");
 		}
-
-
-		// Two triangles are always the same, so can be initialized just once in advance				
-		GLuint elementbuffer, uvbuffer;
-		GLuint index_buffer[] = {0, 1, 3, 1, 2, 3};
-		GLint uv_buffer[] = {0, 0, config.frame_width, 0, config.frame_width, config.frame_height, 0, config.frame_height};
-		glGenBuffers(1, &elementbuffer);
-		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
-		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer), index_buffer, GL_STATIC_DRAW);
-
-		glGenBuffers(1, &uvbuffer);
-		glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(uv_buffer), uv_buffer, GL_STATIC_DRAW);
-		
-		// STL model is also static
-		GLuint modelbuffer;
-		glGenBuffers(1, &modelbuffer);
-		glBindBuffer(GL_ARRAY_BUFFER, modelbuffer);
-		glBufferData(GL_ARRAY_BUFFER, sizeof(float)*model_triangles*3, model_vertices.get(), GL_STATIC_DRAW);		
 		
 		GLuint texture1ID = createTexture(GL_TEXTURE_2D, GL_LINEAR, GL_LINEAR);
 		GLuint texture2ID = createTexture(GL_TEXTURE_2D, GL_LINEAR, GL_LINEAR);
@@ -345,7 +344,7 @@ int main(int argc, char* argv[])
 		
 		
 		VmbInt64_t PayloadSize = readFeature(camera1, feature1, "PayloadSize");		
-		PayloadSize = HW > PayloadSize ? HW : PayloadSize; 
+		PayloadSize = (HW > PayloadSize ? HW : PayloadSize) + 1; 
 		
 		// these will be destroyed at the end of a app
 		std::unique_ptr<float[]> lookup1 = config::prepare_lookup2(camera1_pair.first, cam1_k1, cam1_k2, config.frame_width, config.frame_height);
@@ -357,7 +356,7 @@ int main(int argc, char* argv[])
 		IFrameObserverPtr pObserver1(new FrameObserver(camera1, buffer1.get(), lookup1.get(), config.frame_width, config.frame_height));
 		IFrameObserverPtr pObserver2(new FrameObserver(camera2, buffer2.get(), lookup2.get(), config.frame_width, config.frame_height));
 
-		std::unique_ptr<uint8_t[]> buffer3 = std::unique_ptr<uint8_t[]>(new uint8_t[PayloadSize*3+1]);
+		std::unique_ptr<uint8_t[]> buffer3 = std::unique_ptr<uint8_t[]>(new uint8_t[PayloadSize*3]);
 		
 				
 		setFeature(camera1, feature1, "AcquisitionMode", "Continuous");
@@ -403,20 +402,20 @@ int main(int argc, char* argv[])
 		((FrameObserver*)pObserver1.get())->frame_arrived = false;
 		((FrameObserver*)pObserver2.get())->frame_arrived = false;
 		runCommand(camera1, feature1, "TriggerSoftware");		
-		time_t triggered = time(NULL);
+		time_t triggered = std::time(NULL);
 		std::cout << triggered << " Triggered Frames" << std::endl;
 		//glBindFramebuffer(GL_FRAMEBUFFER, 0);
 		//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		//glUseProgram(mainProgramID);
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+		glClearColor(0.f, 0.f, 0.0f, 1.0f);
 		
 		//int layerz = 0;
-		int frameNum = 0;
+		unsigned long frameNum = 0;
 		while (!glfwWindowShouldClose(window) && glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS)
 		{				
 			checkGLError("Iteration Frame 1");
 			std::cout << "GL Frame " << frameNum ++  << std::endl;
-
+			
 			// Clear both framebuffers at the beginning of a frame
 			//glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
 			//glViewport(0, 0, config.frame_width, config.frame_height*2);
@@ -487,6 +486,8 @@ int main(int argc, char* argv[])
 			runCommand(camera1, feature1, "TriggerSoftware");
 			triggered = time(NULL);
 			std::cout << triggered << " Triggered Frames normally" << std::endl;			
+
+
 
 			// turn on the indexing 
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
@@ -616,71 +617,92 @@ int main(int argc, char* argv[])
 				}
 			}
 
-			std::cout << "major plane: (" << length << ") / ";
-			vec3 abc = findMajourPlane(Points1.get(), length, config.plane_threshold);
-			std::cout << " " << abc.x << " " << abc.y << " " << abc.z << " " << std::endl;
+			//std::cout << "major plane: (" << length << ") / ";
+			//vec3 abc = findMajourPlane(Points1.get(), length, config.plane_threshold);
+			//std::cout << " " << abc.x << " " << abc.y << " " << abc.z << " " << std::endl;
 
-			int k = 0;
-			for (int i = 0; i < length; i++)
-			{
-				const float error = abs(abc.x * Points1[i].x + abc.y * Points1[i].y + abc.z - Points1[i].z);
-				if (error <= config.scene_threshold)
-				{
-					Points1[k].x = Points1[i].x;
-					Points1[k].y = Points1[i].y;
-					Points1[k].z = Points1[i].z;
-					k++;
-				}
-			}
-			goicp.Nd = k;			
-			
+			//int k = 0;
+			//for (int i = 0; i < length; i++)
+			//{
+			//	const float error = abs(abc.x * Points1[i].x + abc.y * Points1[i].y + abc.z - Points1[i].z);
+			//	if (error <= config.scene_threshold)
+			//	{
+			//		Points1[k].x = Points1[i].x;
+			//		Points1[k].y = Points1[i].y;
+			//		Points1[k].z = Points1[i].z;
+			//		k++;
+			//	}
+			//}
+			//goicp.Nd = k;			
+			goicp.Nd = length;
 			cout << "Registering..." << endl;
-			clockBegin = clock();
+			clock_t clockBegin = clock();
 			goicp.Register();
-			clockEnd = clock();
-			double time = (double)(clockEnd - clockBegin) / CLOCKS_PER_SEC;
+			clock_t clockEnd = clock();
+			double timea = (double)(clockEnd - clockBegin) / CLOCKS_PER_SEC;
 			cout << "Optimal Rotation Matrix:" << endl;
 			cout << goicp.optR << endl;
 			cout << "Optimal Translation Vector:" << endl;
 			cout << goicp.optT << endl;
-			cout << "Finished in " << time << endl;
-
+			cout << "Finished in " << timea << endl;
+			glm::mat4 Transform();
 			//////////////////////  SCREEN FRAMEBUFFER DISPLAY ALIGNED MODEL
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			
-			// Enable depth test		
-			glEnable(GL_DEPTH_TEST);
-			// Accept fragment if it closer to the camera than the former one
-			glDepthFunc(GL_LESS);
+			//glEnable(GL_DEPTH_TEST);
 
-			glUseProgram(displayProgramID);
-			//glViewport(0, config.frame_height, config.frame_width, config.frame_height);
-			glViewport(0, 0, config.screen_width, config.screen_height);
-
+			glUseProgram(display2ProgramID);
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, texture1ID);
-
+			glUniform1i(glGetUniformLocation(display2ProgramID, "Texture1"), 0);
+			
+			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
 			glEnableVertexAttribArray(0);
-			glBindBuffer(GL_ARRAY_BUFFER, modelbuffer);
-			glVertexAttribPointer(0, 3, GL_FLOAT, GL_TRUE, 0, (void*)0);
-			glm::mat4 Transform(1,0,0,0,0,1,0,0,0,0,1,0,0,0,1000,1);
-			glUniformMatrix4fv(glGetUniformLocation(l2rFilterProgramID, "Transform"), 1, GL_FALSE, &Transform[0][0]);
-			glUniform1i(glGetUniformLocation(displayProgramID, "Texture1"), 0);
+			glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
+			glVertexAttribIPointer(0, 2, GL_INT, 0, (void*)0);
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0);
+			glDisableVertexAttribArray(0);
+
+			glEnable(GL_BLEND); 
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+			// Enable depth test		
+			//glEnable(GL_DEPTH_TEST);
+			// Accept fragment if it closer to the camera than the former one
+			//glDepthFunc(GL_LESS);
+
+			glDisable(GL_CULL_FACE);
+			glUseProgram(displayProgramID);
+			//glViewport(0, 0, config.frame_width, config.frame_height);
+
+			glActiveTexture(GL_TEXTURE0);
+			//glBindTexture(GL_TEXTURE_2D, texture1ID);
+			//glUniform1i(glGetUniformLocation(displayProgramID, "Texture1"), 0);
+			
 			// turn off the indexing  (it's easier for STL rendering)
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0);
+			glEnableVertexAttribArray(0);
+			glBindBuffer(GL_ARRAY_BUFFER, modelbuffer);
+			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+			//glm::mat4 Transform(1,0,0,0,0,1,0,0,0,0,1,0,400,0,800,1);
+			glUniformMatrix4fv(glGetUniformLocation(displayProgramID, "C1"), 1, GL_FALSE, &C1[0][0]);
+			glUniformMatrix4fv(glGetUniformLocation(displayProgramID, "Transform"), 1, GL_FALSE, &Transform[0][0]);
+			
+			glDrawArrays(GL_TRIANGLES, 0, model_triangles*3);
 
 			glDisableVertexAttribArray(0);
 
 			
 			glfwSwapBuffers(window);
+			
 			glfwPollEvents();			
 		}
 
 		glDisableVertexAttribArray(0);
-		glDeleteBuffers(1, &uvbuffer);
-		glDeleteBuffers(1, &elementbuffer);
+		//glDeleteBuffers(1, &uvbuffer);
+		//glDeleteBuffers(1, &elementbuffer);
+		glDeleteBuffers(1, &modelbuffer);
 		glDeleteVertexArrays(1, &vao);
 		glDeleteTextures(1, &texture1ID);
 		glDeleteTextures(1, &texture2ID);
@@ -873,7 +895,7 @@ glm::vec3 findMajourPlane(const POINT3D* const Points1, const int length, const 
 			bestABC = abc;
 		}
 	}
-	cout << " (" << bestNumber << ") ";
+	std::cout << " (" << bestNumber << ") ";
 	return bestABC;
 }
 
@@ -896,8 +918,11 @@ std::pair<float*, uint32_t> read_stl(const char * const filename)
 	{
 		float p[3];
 		ifs.read(reinterpret_cast<char *>(&p), 3 * sizeof(float));
-
+		
 		ifs.read(reinterpret_cast<char *>(&points[i * 9]), 9 * sizeof(float));
+		
+		uint16_t attrib;
+		ifs.read(reinterpret_cast<char *>(&attrib), sizeof(attrib));
 	}
 	return std::make_pair<float*, uint32_t>(std::move(points), std::move(triangles));
 }

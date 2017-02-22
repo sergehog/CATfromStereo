@@ -50,7 +50,7 @@ public:
 		VmbUint64_t frameid;
 		m_pCamera->GetID(camid);
 		pFrame->GetFrameID(frameid);
-		std::cout << time(NULL) << " " << camid << ": " << frameid << std::endl;
+		//std::cout << time(NULL) << " " << camid << ": " << frameid << std::endl;
 		VmbUint32_t width, height, imsize;
 		VmbUchar_t * _buffer1;
 		pFrame->GetWidth(width);

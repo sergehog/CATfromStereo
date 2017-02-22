@@ -23,7 +23,7 @@
 	CONFIG_PARAM(string, camera1_name, "config.camera1_name") \
 	CONFIG_PARAM(string, camera2_name, "config.camera2_name") \
 	CONFIG_PARAM_OPTIONAL(unsigned, camera_binning, "config.camera_binning", 1) \
-	CONFIG_PARAM_OPTIONAL(unsigned, exposure_time, "config.exposure_time", 15000) \
+	CONFIG_PARAM_OPTIONAL(double, exposure_time, "config.exposure_time", 15000) \
 	CONFIG_PARAM(float, minZ, "config.minZ") \
 	CONFIG_PARAM(float, maxZ, "config.maxZ") \
 	CONFIG_PARAM(int, layers, "config.layers") \
@@ -42,7 +42,11 @@
 	CONFIG_PARAM(string, main_vertex_shader, "config.main_vertex_shader") \
 	CONFIG_PARAM(string, main_fragment_shader, "config.main_fragment_shader") \
 	CONFIG_PARAM(string, show_vertex_shader, "config.show_vertex_shader") \
-	CONFIG_PARAM(string, show_fragment_shader, "config.show_fragment_shader")
+	CONFIG_PARAM(string, show_fragment_shader, "config.show_fragment_shader")\
+	CONFIG_PARAM(string, show2_vertex_shader, "config.show2_vertex_shader") \
+	CONFIG_PARAM(string, show2_fragment_shader, "config.show2_fragment_shader")\
+	CONFIG_PARAM(string, depth_vertex_shader, "config.depth_vertex_shader") \
+	CONFIG_PARAM(string, depth_fragment_shader, "config.depth_fragment_shader")
 
 using namespace std;
 namespace config

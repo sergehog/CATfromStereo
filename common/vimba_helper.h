@@ -56,6 +56,13 @@ void setFeature(CameraPtr camera, FeaturePtr feature, const char* name, VmbInt32
 	checkStatus(feature->SetValue(value));
 }
 
+void setFeatureDouble(CameraPtr camera, FeaturePtr feature, const char* name, double value)
+{
+	checkStatus(camera->GetFeatureByName(name, feature));
+	checkStatus(feature->SetValue(value));
+}
+
+
 void runCommand(CameraPtr camera, FeaturePtr feature, const char* name)
 {
 	checkStatus(camera->GetFeatureByName(name, feature));

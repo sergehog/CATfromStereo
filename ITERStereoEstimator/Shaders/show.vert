@@ -2,7 +2,7 @@
 
 layout(location = 0) in vec3 stl;
 
-varying out float z;
+varying float z;
 uniform mat4 Transform;
 uniform mat4 C1;
 uniform uint width;
@@ -13,7 +13,10 @@ uniform float maxZ;
 
 void main()
 {			
-	vec4 uvz = C1*Transform*vec4(stl, 1);
-	z = (uvz.z-minZ)/(maxZ-minZ);
-	gl_Position = vec4((uvz.x/uvz.z)/width, (uvz.u/uvz.z)/height, (uvz.z-minZ)/(maxZ-minZ), 1.0);
+	vec4 uvz = C1*Transform*(vec4(stl, 1));		
+	float x = 2*(uvz.x/uvz.z)/float(width)-1.0;
+	float y = 1.0-2.0*(uvz.y/uvz.z)/float(height);	
+	z = (uvz.z-minZ)/(maxZ-minZ);	
+	
+	gl_Position = vec4(x, y, 0, 1.0);
 }
