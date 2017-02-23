@@ -103,7 +103,7 @@ int main(int argc, char* argv[])
 		const glm::mat4 C2C1inv = C2*glm::inverse(C1);
 		const glm::mat4 C1C2inv = C1*glm::inverse(C2);
 		//C1[3][3] = 1;
-		const glm::mat4 Scale(scale, 0.f, 0.f, 0.f, 0.f, scale, 0.f, 0.f, 0.f, 0.f, scale, 0.f, 0.f, 0.f, 0.f, 1.f);
+		const glm::mat4 Scale(1/scale, 0.f, 0.f, 0.f, 0.f, 1 / scale, 0.f, 0.f, 0.f, 0.f, 1 / scale, 0.f, 0.f, 0.f, 0.f, 1.f);
 		const glm::mat4 ScaleInv = glm::inverse(Scale);
 
 		std::pair<float*, uint32_t> stl_pair = read_stl(config.stl_file.c_str());
@@ -153,8 +153,8 @@ int main(int argc, char* argv[])
 		//glfwWindowHint(GLFW_SAMPLES, config.fsaa);
 
 		//GLFWwindow* window = glfwCreateWindow(1024, 768, "ITER Stereo Pose Estimator", glfwGetPrimaryMonitor(), NULL);
-		//GLFWwindow* window = glfwCreateWindow(config.screen_width, config.screen_height, "ITER Stereo Pose Estimator", NULL, NULL);
-		GLFWwindow* window = glfwCreateWindow(config.frame_width, config.frame_height, "ITER Stereo Pose Estimator", NULL, NULL);
+		GLFWwindow* window = glfwCreateWindow(config.screen_width, config.screen_height, "ITER Stereo Pose Estimator", NULL, NULL);
+		//GLFWwindow* window = glfwCreateWindow(config.frame_width, config.frame_height, "ITER Stereo Pose Estimator", NULL, NULL);
 
 		// Open a window and create its OpenGL context		
 		if (!window)
@@ -235,19 +235,10 @@ int main(int argc, char* argv[])
 		GLuint costvolFramebufferID;
 		glGenFramebuffers(1, &costvolFramebufferID);
 		glBindFramebuffer(GL_FRAMEBUFFER, costvolFramebufferID);		
+		// The textureArray with the cost volume
 		GLuint costvolTextureID = createTexture(GL_TEXTURE_2D_ARRAY, GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
-		//// The texture we're going to render to
-		//glGenTextures(1, &costvolTextureID);
-		//// "Bind" the newly created texture : all future texture functions will modify this texture
-		//glBindTexture(GL_TEXTURE_2D_ARRAY, costvolTextureID);		
-		//// Texture filtering
-		//glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		//glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-		//glTexStorage3D(GL_TEXTURE_2D_ARRAY, 10, GL_RGB32F, config.frame_width, config.frame_height, config.layers);
 		glTexStorage3D(GL_TEXTURE_2D_ARRAY, 5, GL_R16, config.frame_width, config.frame_height*2, config.layers);
-		// Set "renderedTexture" as our colour attachement #0
+		// Set "costvolTextureID" as our colour attachement #0
 		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, costvolTextureID, 0);
 		checkGLError("Render-to-Texture Framebuffer creation");
 		//GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
@@ -264,23 +255,14 @@ int main(int argc, char* argv[])
 		glGenFramebuffers(1, &depthFramebufferID);
 		glBindFramebuffer(GL_FRAMEBUFFER, depthFramebufferID);
 		GLuint depthTextureID = createTexture(GL_TEXTURE_2D, GL_NEAREST, GL_NEAREST);
-		//glGenTextures(1, &depthTextureID);
-		//// "Bind" the newly created texture : all future texture functions will modify this texture
-		//glBindTexture(GL_TEXTURE_2D, depthTextureID);
-		//// Texture filtering
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R8, config.frame_width, config.frame_height * 2);
-		// Set "renderedTexture" as our colour attachement #0
+		// Set "depthTextureID" as our colour attachement #0
 		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, depthTextureID, 0);
 		checkGLError("Render-to-Texture Framebuffer 2 creation");
 		//GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
 		drawBuffer = GL_COLOR_ATTACHMENT0;
 		glDrawBuffers(1, &drawBuffer); // "1" is the size of DrawBuffers
-
-									   // check either our framebuffer is ok
+		// check either our framebuffer is ok
 		if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
 		{
 			throw std::exception("Framebuffer#2 is not OK!");
@@ -291,12 +273,6 @@ int main(int argc, char* argv[])
 		glGenFramebuffers(1, &pointsFramebufferID);
 		glBindFramebuffer(GL_FRAMEBUFFER, pointsFramebufferID);
 		GLuint pointsTextureID = createTexture(GL_TEXTURE_2D, GL_NEAREST, GL_NEAREST);
-		//glGenTextures(1, &pointsTextureID);
-		//glBindTexture(GL_TEXTURE_2D, pointsTextureID);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R8, config.frame_width, config.frame_height);
 		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, pointsTextureID, 0);
 		checkGLError("Render-to-Texture Framebuffer 2 creation");
@@ -312,22 +288,6 @@ int main(int argc, char* argv[])
 		GLuint texture1ID = createTexture(GL_TEXTURE_2D, GL_LINEAR, GL_LINEAR);
 		GLuint texture2ID = createTexture(GL_TEXTURE_2D, GL_LINEAR, GL_LINEAR);
 
-		//GLuint texture1ID, texture2ID;
-		//glGenTextures(1, &texture1ID);
-		//glBindTexture(GL_TEXTURE_2D, texture1ID);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		////glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-
-		//glGenTextures(1, &texture2ID);
-		//glBindTexture(GL_TEXTURE_2D, texture2ID);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		//glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		////glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		checkGLError("Buffers and Textures init");
 		
 		CameraPtr camera1, camera2;		
@@ -623,29 +583,29 @@ int main(int argc, char* argv[])
 					const float u = float(i % width);
 					const float v = float(i / width);
 					glm::vec4 xyz  = C1inv * glm::vec4(u*z, v*z, z, 1.f);
-					Points1[length].x = xyz.x;
-					Points1[length].y = xyz.y;
-					Points1[length].z = xyz.z;
+					Points1[length].x = xyz.x / scale;
+					Points1[length].y = xyz.y / scale;
+					Points1[length].z = xyz.z / scale;
 
-					average.x += xyz.x;
-					average.y += xyz.y;
-					average.z += xyz.z;
+					//average.x += xyz.x;
+					//average.y += xyz.y;
+					//average.z += xyz.z;
 					length++;
 				}
 			}
-			average.x /= length;
-			average.y /= length;
-			average.z /= length;
-			#pragma omp parallel for
-			for (int i = 0; i < length; i++)
-			{
-				Points1[i].x = (Points1[i].x - average.x) / scale;
-				Points1[i].y = (Points1[i].y - average.y) / scale;
-				Points1[i].z = (Points1[i].z - average.z) / scale;
-			}
-			
-			glm::mat4 Translate = glm::mat4(1.0);
-			Translate[3] = vec4(-average.x, -average.y, -average.z, 0.f);
+			//average.x /= length;
+			//average.y /= length;
+			//average.z /= length;
+			//#pragma omp parallel for
+			//for (int i = 0; i < length; i++)
+			//{
+			//	Points1[i].x = (Points1[i].x - average.x) / scale;
+			//	Points1[i].y = (Points1[i].y - average.y) / scale;
+			//	Points1[i].z = (Points1[i].z - average.z) / scale;
+			//}
+			//
+			//glm::mat4 Translate = glm::mat4(1.0);
+			//Translate[3] = vec4(-average.x, -average.y, -average.z, 1.f);
 
 
 			//std::cout << "major plane: (" << length << ") / ";
@@ -677,15 +637,17 @@ int main(int argc, char* argv[])
 			//cout << goicp.optT << endl;
 			//cout << "Finished in " << timea << endl;
 			
-			float a[] = {goicp.optR(0, 0), goicp.optR(1, 0), goicp.optR(2, 0), 0.0,  goicp.optR(0, 1), goicp.optR(1, 1), goicp.optR(2, 1), 0.f, goicp.optR(0, 2), goicp.optR(1, 2), goicp.optR(2, 2), 0.0, goicp.optT(0), goicp.optT(1), goicp.optT(2), 1.0 };
+			//float a[] = {goicp.optR(0, 0), goicp.optR(1, 0), goicp.optR(2, 0), 0.0,  goicp.optR(0, 1), goicp.optR(1, 1), goicp.optR(2, 1), 0.f, goicp.optR(0, 2), goicp.optR(1, 2), goicp.optR(2, 2), 0.0, goicp.optT(0), goicp.optT(1), goicp.optT(2), 1.0 };
+			float a[] = { goicp.optR(0, 0), goicp.optR(0, 1), goicp.optR(0, 2), 0.0,  goicp.optR(1, 0), goicp.optR(1, 1), goicp.optR(1, 2), 0.f, goicp.optR(2,0), goicp.optR(2,1), goicp.optR(2, 2), 0.0, goicp.optT(0), goicp.optT(1), goicp.optT(2), 1.0 };
 			glm::mat4 Transform(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12], a[13], a[14], a[15]);
 			
-			Transform = glm::inverse(Translate)*(ScaleInv*Transform*Scale);
+			//Transform = (ScaleInv*Transform*Scale)*Translate;
+			Transform = (ScaleInv*Transform*Scale);
 			Transform = glm::inverse(Transform);
-			std::cout << Transform[0].x << Transform[1].x << Transform[2].x << Transform[3].x << std::endl;
-			std::cout << Transform[0].y << Transform[1].y << Transform[2].y << Transform[3].y << std::endl;
-			std::cout << Transform[0].z << Transform[1].z << Transform[2].z << Transform[3].z << std::endl;
-			std::cout << Transform[0].w << Transform[1].w << Transform[2].w << Transform[3].w << std::endl;
+			std::cout << Transform[0].x << " " << Transform[1].x << " " << Transform[2].x << " " << Transform[3].x << std::endl;
+			std::cout << Transform[0].y << " " << Transform[1].y << " " << Transform[2].y << " " << Transform[3].y << std::endl;
+			std::cout << Transform[0].z << " " << Transform[1].z << " " << Transform[2].z << " " << Transform[3].z << std::endl;
+			std::cout << Transform[0].w << " " << Transform[1].w << " " << Transform[2].w << " " << Transform[3].w << std::endl;
 
 
 			//glm::mat3 Transform();
@@ -693,7 +655,7 @@ int main(int argc, char* argv[])
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			//glEnable(GL_DEPTH_TEST);
-
+			
 			glUseProgram(display2ProgramID);
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, texture1ID);
@@ -708,6 +670,8 @@ int main(int argc, char* argv[])
 
 			glEnable(GL_BLEND); 
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			glEnable(GL_DEPTH_TEST);
+			//glBlendFunc(GL_ONE, GL_ONE);
 
 			// Enable depth test		
 			//glEnable(GL_DEPTH_TEST);
@@ -735,7 +699,7 @@ int main(int argc, char* argv[])
 			glDrawArrays(GL_TRIANGLES, 0, model_triangles*3);
 
 			glDisableVertexAttribArray(0);
-
+			glDisable(GL_BLEND);
 			
 			glfwSwapBuffers(window);
 			

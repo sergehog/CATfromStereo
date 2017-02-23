@@ -16,7 +16,7 @@ out vec4 colorOut;
 
 void main()
 {		
-	colorOut = vec4(0, z, z, 0.5);
+	colorOut = vec4(0, 1, 1, 0.3);
 	//colorOut = vec3(1.0, 1.0, 1.0);
 }
 
