@@ -68,7 +68,7 @@ void main()
 	//colorOut = vec3(d2, d2, d2);
 	//return;
 	
-	if(abs(d1-d2) < 0.05 && grad > 0.02 && color.r > 0.02)
+	if(abs(d1-d2) < 0.02 && grad > 0.1 && color.r > 0.02)
 	{		
 		float d = (d1 + d2)/2;
 		colorOut = vec3(d, d, d);

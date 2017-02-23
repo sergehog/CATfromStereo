@@ -53,8 +53,8 @@ GLuint loadProgramAndSetup(string vertex, string fragment, string geometry, cons
 	glUniform1f(glGetUniformLocation(programID, "minZ"), config.minZ);
 	glUniform1f(glGetUniformLocation(programID, "maxZ"), config.maxZ);
 	glUniform1ui(glGetUniformLocation(programID, "layers"), config.layers);
-	glUniform1ui(glGetUniformLocation(programID, "width"), config.frame_width);
-	glUniform1ui(glGetUniformLocation(programID, "height"), config.frame_height);
+	glUniform1ui(glGetUniformLocation(programID, "width"), config.input_width);
+	glUniform1ui(glGetUniformLocation(programID, "height"), config.input_height);
 	return programID;
 }
 
@@ -111,7 +111,7 @@ int main(int argc, char* argv[])
 		uint32_t model_triangles = stl_pair.second;
 		std::pair<POINT3D*, uint32_t> points_pair = read_points(config.points_file.c_str());
 		std::unique_ptr<POINT3D[]> pModel(points_pair.first);
-		std::unique_ptr<POINT3D[]> Points1 = std::unique_ptr<POINT3D[]>(new POINT3D[config.frame_width*config.frame_height+1]);
+		std::unique_ptr<POINT3D[]> Points1 = std::unique_ptr<POINT3D[]>(new POINT3D[width*height+1]);
 		for(long i=0; i<points_pair.second; i++)
 		{
 			pModel[i].x /= scale;
@@ -119,8 +119,8 @@ int main(int argc, char* argv[])
 			pModel[i].z /= scale;
 		}
 		GoICP goicp;
-		goicp.MSEThresh = 5;
-		goicp.trimFraction = 0.2;
+		goicp.MSEThresh = 10;
+		goicp.trimFraction = 0.4;
 		goicp.doTrim = true;
 		goicp.pModel = pModel.get();
 		goicp.Nm = points_pair.second;
@@ -215,7 +215,7 @@ int main(int argc, char* argv[])
 		// Two triangles are always the same, so can be initialized just once in advance				
 		GLuint elementbuffer, uvbuffer;
 		GLuint index_buffer[] = { 0, 1, 3, 1, 2, 3 };
-		GLint uv_buffer[] = { 0, 0, config.frame_width, 0, config.frame_width, config.frame_height, 0, config.frame_height };
+		GLint uv_buffer[] = { 0, 0, width, 0, width, height, 0, height};
 		glGenBuffers(1, &elementbuffer);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer), index_buffer, GL_STATIC_DRAW);
@@ -237,7 +237,7 @@ int main(int argc, char* argv[])
 		glBindFramebuffer(GL_FRAMEBUFFER, costvolFramebufferID);		
 		// The textureArray with the cost volume
 		GLuint costvolTextureID = createTexture(GL_TEXTURE_2D_ARRAY, GL_LINEAR, GL_LINEAR_MIPMAP_LINEAR);
-		glTexStorage3D(GL_TEXTURE_2D_ARRAY, 5, GL_R16, config.frame_width, config.frame_height*2, config.layers);
+		glTexStorage3D(GL_TEXTURE_2D_ARRAY, 5, GL_R16, width, height*2, config.layers);
 		// Set "costvolTextureID" as our colour attachement #0
 		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, costvolTextureID, 0);
 		checkGLError("Render-to-Texture Framebuffer creation");
@@ -255,7 +255,7 @@ int main(int argc, char* argv[])
 		glGenFramebuffers(1, &depthFramebufferID);
 		glBindFramebuffer(GL_FRAMEBUFFER, depthFramebufferID);
 		GLuint depthTextureID = createTexture(GL_TEXTURE_2D, GL_NEAREST, GL_NEAREST);
-		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R8, config.frame_width, config.frame_height * 2);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R8, width, height * 2);
 		// Set "depthTextureID" as our colour attachement #0
 		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, depthTextureID, 0);
 		checkGLError("Render-to-Texture Framebuffer 2 creation");
@@ -273,7 +273,7 @@ int main(int argc, char* argv[])
 		glGenFramebuffers(1, &pointsFramebufferID);
 		glBindFramebuffer(GL_FRAMEBUFFER, pointsFramebufferID);
 		GLuint pointsTextureID = createTexture(GL_TEXTURE_2D, GL_NEAREST, GL_NEAREST);
-		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R8, config.frame_width, config.frame_height);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R8, width, height);
 		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, pointsTextureID, 0);
 		checkGLError("Render-to-Texture Framebuffer 2 creation");
 		//GLenum drawBuffers[1] = { GL_COLOR_ATTACHMENT0 };
@@ -300,15 +300,15 @@ int main(int argc, char* argv[])
 		setFeature(camera1, feature1, "BinningHorizontal", config.camera_binning);
 		setFeature(camera1, feature1, "BinningVertical", config.camera_binning);
 		setFeature(camera1, feature1, "PixelFormat", "Mono8");
-		setFeature(camera1, feature1, "Width", config.frame_width);
-		setFeature(camera1, feature1, "Height", config.frame_height);
+		setFeature(camera1, feature1, "Width", width);
+		setFeature(camera1, feature1, "Height", height);
 		setFeatureDouble(camera1, feature1, "ExposureTimeAbs", config.exposure_time);
 
 		setFeature(camera2, feature2, "BinningHorizontal", config.camera_binning);
 		setFeature(camera2, feature2, "BinningVertical", config.camera_binning);
 		setFeature(camera2, feature2, "PixelFormat", "Mono8");
-		setFeature(camera2, feature2, "Width", config.frame_width);
-		setFeature(camera2, feature2, "Height", config.frame_height);
+		setFeature(camera2, feature2, "Width", width);
+		setFeature(camera2, feature2, "Height", height);
 		setFeatureDouble(camera2, feature2, "ExposureTimeAbs", config.exposure_time);
 		
 		
@@ -316,14 +316,14 @@ int main(int argc, char* argv[])
 		PayloadSize = (HW > PayloadSize ? HW : PayloadSize) + 1; 
 		
 		// these will be destroyed at the end of a app
-		std::unique_ptr<float[]> lookup1 = config::prepare_lookup2(camera1_pair.first, cam1_k1, cam1_k2, config.frame_width, config.frame_height);
-		std::unique_ptr<float[]> lookup2 = config::prepare_lookup2(camera2_pair.first, cam2_k1, cam2_k2, config.frame_width, config.frame_height);
+		std::unique_ptr<float[]> lookup1 = config::prepare_lookup2(camera1_pair.first, cam1_k1, cam1_k2, width, height);
+		std::unique_ptr<float[]> lookup2 = config::prepare_lookup2(camera2_pair.first, cam2_k1, cam2_k2, width, height);
 		
 
 		std::unique_ptr<VmbUchar_t[]> buffer1(new VmbUchar_t[PayloadSize*4]);
 		std::unique_ptr<VmbUchar_t[]> buffer2(new VmbUchar_t[PayloadSize*4]);		
-		IFrameObserverPtr pObserver1(new FrameObserver(camera1, buffer1.get(), lookup1.get(), config.frame_width, config.frame_height));
-		IFrameObserverPtr pObserver2(new FrameObserver(camera2, buffer2.get(), lookup2.get(), config.frame_width, config.frame_height));
+		IFrameObserverPtr pObserver1(new FrameObserver(camera1, buffer1.get(), lookup1.get(), width, height));
+		IFrameObserverPtr pObserver2(new FrameObserver(camera2, buffer2.get(), lookup2.get(), width, height));
 
 		std::unique_ptr<uint8_t[]> buffer3 = std::unique_ptr<uint8_t[]>(new uint8_t[PayloadSize*3]);
 		
@@ -434,7 +434,7 @@ int main(int argc, char* argv[])
 			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1920, 1080, 0, GL_RED, GL_UNSIGNED_BYTE, buffer1.get());
 			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, config.input_width, config.input_height, 0, GL_RED, GL_UNSIGNED_BYTE, buffer1.get());
 			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, config.input_width, config.input_height, 0, GL_RED, GL_UNSIGNED_BYTE, _buffer1);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, config.input_width, config.input_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer1.get());
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer1.get());
 			glGenerateMipmap(GL_TEXTURE_2D);
 			
 
@@ -443,7 +443,7 @@ int main(int argc, char* argv[])
 			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1920, 1080, 0, GL_RED, GL_UNSIGNED_BYTE, buffer2.get());
 			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, config.input_width, config.input_height, 0, GL_RED, GL_UNSIGNED_BYTE, buffer2.get());
 			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, config.input_width, config.input_height, 0, GL_RED, GL_UNSIGNED_BYTE, _buffer2);
-			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, config.input_width, config.input_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer2.get());
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer2.get());
 			glGenerateMipmap(GL_TEXTURE_2D);
 			
 			camera1->QueueFrame(frame1);
@@ -465,7 +465,7 @@ int main(int argc, char* argv[])
 			glBindFramebuffer(GL_FRAMEBUFFER, costvolFramebufferID);
 			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glUseProgram(costvolProgramID);
-			glViewport(0, 0, config.frame_width, config.frame_height);
+			glViewport(0, 0, width, height);
 
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, texture1ID);
@@ -485,7 +485,7 @@ int main(int argc, char* argv[])
 			glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0, config.layers);
 
 			////// Camera 2 Cost Volume
-			glViewport(0, config.frame_height, config.frame_width, config.frame_height);
+			glViewport(0, height, width, height);
 
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, texture2ID);
@@ -513,7 +513,7 @@ int main(int argc, char* argv[])
 			glUseProgram(wtaProgramID);			
 			//glViewport(0, config.frame_height, config.frame_width, config.frame_height);
 			// works for both cameras at once
-			glViewport(0, 0, config.frame_width, config.frame_height*2);
+			glViewport(0, 0, width, height*2);
 
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, texture1ID);
@@ -566,6 +566,7 @@ int main(int argc, char* argv[])
 			glDisableVertexAttribArray(0);			
 			checkGLError("Iteration Frame 3");			
 			
+			glBindTexture(GL_TEXTURE_2D, pointsTextureID);
 			glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer3.get());
 			checkGLError("glReadPixels Error");
 
@@ -576,8 +577,8 @@ int main(int argc, char* argv[])
 			average.z = 0;
 			for (int i = 0; i < HW; i++)
 			{
-				const float d = buffer3[i * 3];
-				if (d > 0.f)
+				const uint8_t d = buffer3[i * 3];
+				if (d > 0)
 				{
 					const float z = config.maxZ - (config.maxZ - config.minZ) * d / (config.layers - 1.f);
 					const float u = float(i % width);
@@ -593,6 +594,8 @@ int main(int argc, char* argv[])
 					length++;
 				}
 			}
+			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, buffer3.get());
+
 			//average.x /= length;
 			//average.y /= length;
 			//average.z /= length;
@@ -637,8 +640,8 @@ int main(int argc, char* argv[])
 			//cout << goicp.optT << endl;
 			//cout << "Finished in " << timea << endl;
 			
-			//float a[] = {goicp.optR(0, 0), goicp.optR(1, 0), goicp.optR(2, 0), 0.0,  goicp.optR(0, 1), goicp.optR(1, 1), goicp.optR(2, 1), 0.f, goicp.optR(0, 2), goicp.optR(1, 2), goicp.optR(2, 2), 0.0, goicp.optT(0), goicp.optT(1), goicp.optT(2), 1.0 };
-			float a[] = { goicp.optR(0, 0), goicp.optR(0, 1), goicp.optR(0, 2), 0.0,  goicp.optR(1, 0), goicp.optR(1, 1), goicp.optR(1, 2), 0.f, goicp.optR(2,0), goicp.optR(2,1), goicp.optR(2, 2), 0.0, goicp.optT(0), goicp.optT(1), goicp.optT(2), 1.0 };
+			float a[] = {goicp.optR(0, 0), goicp.optR(1, 0), goicp.optR(2, 0), 0.0,  goicp.optR(0, 1), goicp.optR(1, 1), goicp.optR(2, 1), 0.f, goicp.optR(0, 2), goicp.optR(1, 2), goicp.optR(2, 2), 0.0, goicp.optT(0), goicp.optT(1), goicp.optT(2), 1.0 };
+			//float a[] = { goicp.optR(0, 0), goicp.optR(0, 1), goicp.optR(0, 2), 0.0,  goicp.optR(1, 0), goicp.optR(1, 1), goicp.optR(1, 2), 0.f, goicp.optR(2,0), goicp.optR(2,1), goicp.optR(2, 2), 0.0, goicp.optT(0), goicp.optT(1), goicp.optT(2), 1.0 };
 			glm::mat4 Transform(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12], a[13], a[14], a[15]);
 			
 			//Transform = (ScaleInv*Transform*Scale)*Translate;
@@ -660,6 +663,11 @@ int main(int argc, char* argv[])
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, texture1ID);
 			glUniform1i(glGetUniformLocation(display2ProgramID, "Texture1"), 0);
+
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, pointsTextureID);
+			glUniform1i(glGetUniformLocation(display2ProgramID, "DepthTexture"), 1);
+
 			
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
 			glEnableVertexAttribArray(0);
@@ -670,7 +678,7 @@ int main(int argc, char* argv[])
 
 			glEnable(GL_BLEND); 
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			glEnable(GL_DEPTH_TEST);
+			//glEnable(GL_DEPTH_TEST);
 			//glBlendFunc(GL_ONE, GL_ONE);
 
 			// Enable depth test		
@@ -917,12 +925,18 @@ std::pair<float*, uint32_t> read_stl(const char * const filename)
 {
 	ifstream ifs(filename, ios::in | ios::binary);
 	char header_info[80];
+	if (ifs.eof())
+	{
+		throw std::exception((string("bad file: ") + string(filename)).c_str());
+	}
 	ifs.read(header_info, 80);
 	uint32_t triangles;
 	ifs.read(reinterpret_cast<char *>(&triangles), sizeof(uint32_t));
 	float * points = new float[triangles * 3 * 3];
 	for (uint32_t i = 0; i < triangles; i++)
 	{
+		if (ifs.eof())
+			throw std::exception((string("cannot read lines from the file: ") + string(filename)).c_str());
 		float p[3];
 		ifs.read(reinterpret_cast<char *>(&p), 3 * sizeof(float));
 		
@@ -938,10 +952,16 @@ std::pair<POINT3D*, uint32_t> read_points(const char * const filename)
 {
 	ifstream ifs(filename, ios::in | ios::binary);
 	uint32_t points;
+	if (ifs.eof())
+	{
+		throw std::exception((string("bad file: ") + string(filename)).c_str());
+	}
 	ifs.read(reinterpret_cast<char *>(&points), sizeof(uint32_t));
 	POINT3D * pointXYZs = new POINT3D[points];
 	for (uint32_t i = 0; i < points; i++)
 	{
+		if (ifs.eof())
+			throw std::exception((string("cannot read lines from the file: ") + string(filename)).c_str());
 		//ifs.read(reinterpret_cast<char *>(&pointXYZs[i * 3]), 3 * sizeof(float));
 		ifs.read(reinterpret_cast<char *>(&(pointXYZs[i].x)), sizeof(float));
 		ifs.read(reinterpret_cast<char *>(&(pointXYZs[i].y)), sizeof(float));

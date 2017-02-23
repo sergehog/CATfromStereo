@@ -17,6 +17,6 @@ void main()
 	float x = 2*(uvz.x/uvz.z)/float(width)-1;
 	float y = 1-2.0*(uvz.y/uvz.z)/float(height);	
 	z = (uvz.z-minZ)/(maxZ-minZ);	
-	
-	gl_Position = vec4(x, y, z, 1.0);
+	//z = z < 0 ? sqrt(-1.0) : z;	
+	gl_Position = vec4(x, y, 0, 1.0);
 }

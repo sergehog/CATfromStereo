@@ -27,10 +27,8 @@
 	CONFIG_PARAM(float, minZ, "config.minZ") \
 	CONFIG_PARAM(float, maxZ, "config.maxZ") \
 	CONFIG_PARAM(int, layers, "config.layers") \
-	CONFIG_PARAM_OPTIONAL(unsigned, frame_width, "config.frame_width", input_width) \
-	CONFIG_PARAM_OPTIONAL(unsigned, frame_height, "config.frame_height", input_height) \
-	CONFIG_PARAM_OPTIONAL(unsigned, screen_width, "config.screen_width", frame_width) \
-	CONFIG_PARAM_OPTIONAL(unsigned, screen_height, "config.screen_height", frame_height) \
+	CONFIG_PARAM_OPTIONAL(unsigned, screen_width, "config.screen_width", input_width) \
+	CONFIG_PARAM_OPTIONAL(unsigned, screen_height, "config.screen_height", input_height) \
 	CONFIG_PARAM_OPTIONAL(unsigned, buffer_frame_number, "config.buffer_frame_number", 2) \
 	CONFIG_PARAM_OPTIONAL(float, param1, "config.param1", 0.f) \
 	CONFIG_PARAM_OPTIONAL(float, param2, "config.param2", 0.f) \
