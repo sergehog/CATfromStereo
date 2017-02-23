@@ -458,8 +458,8 @@ int main(int argc, char* argv[])
 
 
 
-			// turn on the indexing 
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
+			
+
 			/////////////////////////////////////// FIRST FRAMEBUFFER - COST VOLUME /////////////////////
 			///// Camera 1 Cost Volume
 			glBindFramebuffer(GL_FRAMEBUFFER, costvolFramebufferID);
@@ -480,11 +480,10 @@ int main(int argc, char* argv[])
 			glUniform1i(glGetUniformLocation(costvolProgramID, "Texture1"), 0);
 			glUniform1i(glGetUniformLocation(costvolProgramID, "Texture2"), 1);
 
-			//glViewport(0, 0, config.frame_width, config.frame_height);
 			glUniformMatrix4fv(glGetUniformLocation(costvolProgramID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
 			glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0, config.layers);
 
-			////// Camera 2 Cost Volume
+			////// Camera 2 Cost Volume ////////////////////
 			glViewport(0, height, width, height);
 
 			glActiveTexture(GL_TEXTURE0);
@@ -500,18 +499,15 @@ int main(int argc, char* argv[])
 			glUniform1i(glGetUniformLocation(costvolProgramID, "Texture1"), 0);
 			glUniform1i(glGetUniformLocation(costvolProgramID, "Texture2"), 1);
 
-			//glViewport(0, 0, config.frame_width, config.frame_height);
 			glUniformMatrix4fv(glGetUniformLocation(costvolProgramID, "C2C1inv"), 1, GL_FALSE, &C1C2inv[0][0]);
 			glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0, config.layers);
 
 			glDisableVertexAttribArray(0);
 
 			///////////////////////////////  SECOND FRAMEBUFFER - WTA (DEPTH ESTIMATION) //////////////
-
 			glBindFramebuffer(GL_FRAMEBUFFER, depthFramebufferID);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glUseProgram(wtaProgramID);			
-			//glViewport(0, config.frame_height, config.frame_width, config.frame_height);
 			// works for both cameras at once
 			glViewport(0, 0, width, height*2);
 
@@ -541,8 +537,7 @@ int main(int argc, char* argv[])
 			glBindFramebuffer(GL_FRAMEBUFFER, pointsFramebufferID);
 			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glUseProgram(l2rFilterProgramID);
-			//glViewport(0, config.frame_height, config.frame_width, config.frame_height);
-			glViewport(0, 0, config.screen_width, config.screen_height);
+			glViewport(0, 0, width, height);
 
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, texture1ID);
@@ -656,6 +651,7 @@ int main(int argc, char* argv[])
 			//glm::mat3 Transform();
 			//////////////////////  SCREEN FRAMEBUFFER DISPLAY ALIGNED MODEL
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			glViewport(0, 0, config.screen_width, config.screen_height);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			//glEnable(GL_DEPTH_TEST);
 			
@@ -669,7 +665,7 @@ int main(int argc, char* argv[])
 			glUniform1i(glGetUniformLocation(display2ProgramID, "DepthTexture"), 1);
 
 			
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
+			//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
 			glEnableVertexAttribArray(0);
 			glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
 			glVertexAttribIPointer(0, 2, GL_INT, 0, (void*)0);
@@ -695,7 +691,7 @@ int main(int argc, char* argv[])
 			//glUniform1i(glGetUniformLocation(displayProgramID, "Texture1"), 0);
 			
 			// turn off the indexing  (it's easier for STL rendering)
-			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+			//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 			glEnableVertexAttribArray(0);
 			glBindBuffer(GL_ARRAY_BUFFER, modelbuffer);
 			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
