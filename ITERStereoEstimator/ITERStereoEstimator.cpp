@@ -24,7 +24,9 @@
 #include <future>
 #include <chrono>
 #include <thread>
-#include <mutex>
+//#include <mutex>
+#define _USE_MATH_DEFINES
+#include <cmath>
 #include <omp.h>	
 #include "../common/shaders.h"
 #include "../common/config_iter.h"
@@ -55,6 +57,9 @@ GLuint loadProgramAndSetup(string vertex, string fragment, string geometry, cons
 	glUniform1ui(glGetUniformLocation(programID, "layers"), config.layers);
 	glUniform1ui(glGetUniformLocation(programID, "width"), config.input_width);
 	glUniform1ui(glGetUniformLocation(programID, "height"), config.input_height);
+	glUniform1f(glGetUniformLocation(programID, "ltrThr"), config.ltrThr);
+	glUniform1f(glGetUniformLocation(programID, "colorThr"), config.colorThr);
+	glUniform1f(glGetUniformLocation(programID, "gradThr"), config.gradThr);
 	return programID;
 }
 
@@ -70,6 +75,67 @@ GLuint createTexture(GLenum target, GLint mag_filter, GLint min_filter)
 	return textureID;
 }
 
+struct realtime_config
+{
+	realtime_config(float _colorThr, float _gradThr) : colorThr(_colorThr), gradThr(_gradThr),
+		trackingMode(false), keyStillPressed(false)
+	{}
+
+	bool trackingMode;
+	float colorThr;
+	float gradThr;
+	bool keyStillPressed;
+
+	void update(GLFWwindow* window)
+	{
+		if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+		{
+			if (!keyStillPressed)
+			{
+				trackingMode = !trackingMode;
+				keyStillPressed = true;
+			}
+		}
+		else if (glfwGetKey(window, GLFW_KEY_LEFT_BRACKET) == GLFW_PRESS)
+		{
+			if (!keyStillPressed)
+			{
+				gradThr *= 0.8333;
+				keyStillPressed = true;
+			}		
+		}
+		else if (glfwGetKey(window, GLFW_KEY_RIGHT_BRACKET) == GLFW_PRESS)
+		{
+			if (!keyStillPressed)
+			{
+				gradThr *= 1.2;
+				keyStillPressed = true;
+			}
+		}
+		else if (glfwGetKey(window, GLFW_KEY_APOSTROPHE) == GLFW_PRESS)
+		{
+			if (!keyStillPressed)
+			{
+				colorThr *= 0.8333;
+				keyStillPressed = true;
+			}
+		}
+		else if (glfwGetKey(window, GLFW_KEY_BACKSLASH) == GLFW_PRESS)
+		{
+			if (!keyStillPressed)
+			{
+				colorThr *= 1.2;
+				keyStillPressed = true;
+			}
+		}
+		else
+		{
+			keyStillPressed = false;
+		}
+	}
+};
+
+
 int main(int argc, char* argv[])
 {
 	omp_set_num_threads(omp_get_max_threads());
@@ -77,8 +143,6 @@ int main(int argc, char* argv[])
 
 	VimbaSystem &system = VimbaSystem::GetInstance();
 
-	//int ret_code = 0;	
-	const float scale = 1000.f;
 
 	try
 	{
@@ -91,11 +155,12 @@ int main(int argc, char* argv[])
 		const unsigned width = config.input_width;
 		const unsigned height = config.input_height;
 		const unsigned long HW = width * height;
-		
+		const float scale = config.icp_scale;
 		float cam1_k1 = 0.f, cam1_k2 = 0.f, cam2_k1 = 0.f, cam2_k2 = 0.f;
 		const std::pair<const mat3, const mat4x3> camera1_pair = config::camera_loader::read_settings2(config.camera_file, config.camera1_name, cam1_k1, cam1_k2);
 		const std::pair<const mat3, const mat4x3> camera2_pair = config::camera_loader::read_settings2(config.camera_file, config.camera2_name, cam2_k1, cam2_k2);
-						
+		const std::unique_ptr<bool[]> samples_mask(new bool[HW]);
+		const std::unique_ptr<POINT3D[]> randomPoints(new POINT3D[config.random_samples]);
 
 		const glm::mat4 C1(camera1_pair.first * camera1_pair.second);
 		const glm::mat4 C2(camera2_pair.first * camera2_pair.second);
@@ -107,11 +172,16 @@ int main(int argc, char* argv[])
 		const glm::mat4 ScaleInv = glm::inverse(Scale);
 
 		std::pair<float*, uint32_t> stl_pair = read_stl(config.stl_file.c_str());
-		std::unique_ptr<float[]> model_vertices(stl_pair.first);
+		const std::unique_ptr<float[]> model_vertices(stl_pair.first);
 		uint32_t model_triangles = stl_pair.second;
 		std::pair<POINT3D*, uint32_t> points_pair = read_points(config.points_file.c_str());
-		std::unique_ptr<POINT3D[]> pModel(points_pair.first);
-		std::unique_ptr<POINT3D[]> Points1 = std::unique_ptr<POINT3D[]>(new POINT3D[width*height+1]);
+		const std::unique_ptr<POINT3D[]> pModel(points_pair.first);
+		const std::unique_ptr<POINT3D[]> Points1 = std::unique_ptr<POINT3D[]>(new POINT3D[width*height+1]);
+		realtime_config rt_conf(config.colorThr, config.gradThr);
+//#define GOICP
+
+		glm::mat4 Transform;
+#ifdef GOICP
 		for(long i=0; i<points_pair.second; i++)
 		{
 			pModel[i].x /= scale;
@@ -119,12 +189,23 @@ int main(int argc, char* argv[])
 			pModel[i].z /= scale;
 		}
 		GoICP goicp;
-		goicp.MSEThresh = 10;
-		goicp.trimFraction = 0.4;
+		goicp.initNodeRot.a = -1.5708;
+		goicp.initNodeRot.b = -1.5708;
+		goicp.initNodeRot.c = -1.5708;
+		goicp.initNodeRot.w = 3.1416;
+		goicp.initNodeTrans.x = -0.5;
+		goicp.initNodeTrans.y = -0.5;
+		goicp.initNodeTrans.z = -0.5;
+		goicp.initNodeTrans.w = 1.0;
+
+
+		goicp.MSEThresh = config.icp_tresh;
+		//goicp.MSEThresh = 0.1;
+		goicp.trimFraction = config.icp_trim;
 		goicp.doTrim = true;
 		goicp.pModel = pModel.get();
 		goicp.Nm = points_pair.second;
-		goicp.pData = Points1.get();
+		goicp.pData = randomPoints.get();
 		goicp.Nd = 0;		
 		goicp.dt.SIZE = 300; //config.getI("distTransSize");
 		goicp.dt.expandFactor = 2.f;// config.getF("distTransExpandFactor");
@@ -136,8 +217,19 @@ int main(int argc, char* argv[])
 		goicp.BuildDT();
 		clockEnd = clock();
 		std::cout << (double)(clockEnd - clockBegin) / CLOCKS_PER_SEC << "s (CPU)" << endl;
+#else
 
+		ICP3D<float> icp3d;
+		// Build ICP kdtree with model dataset
+		icp3d.Build((float*)pModel.get(), points_pair.second);
+		icp3d.err_diff_def = 1.0;
+		icp3d.trim_fraction = config.icp_trim;
+		icp3d.do_trim = true;
 
+		Eigen::Matrix3d R_icp = Eigen::Matrix3d::Identity();
+		Eigen::Vector3d t_icp(0.0, 0.0, 500.0);
+
+#endif
 		checkStatus(system.Startup());
 		
 		// Initialise GLFW	
@@ -152,10 +244,17 @@ int main(int argc, char* argv[])
 		glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 		//glfwWindowHint(GLFW_SAMPLES, config.fsaa);
 
-		//GLFWwindow* window = glfwCreateWindow(1024, 768, "ITER Stereo Pose Estimator", glfwGetPrimaryMonitor(), NULL);
-		GLFWwindow* window = glfwCreateWindow(config.screen_width, config.screen_height, "ITER Stereo Pose Estimator", NULL, NULL);
-		//GLFWwindow* window = glfwCreateWindow(config.frame_width, config.frame_height, "ITER Stereo Pose Estimator", NULL, NULL);
+		GLFWwindow* window;
+		if (config.full_screen)
+		{
+			window = glfwCreateWindow(config.screen_width, config.screen_height, "ITER Stereo Pose Estimator", glfwGetPrimaryMonitor(), NULL);
+		}
+		else
+		{
+			window = glfwCreateWindow(config.screen_width, config.screen_height, "ITER Stereo Pose Estimator", NULL, NULL);
+		}
 
+		glfwSwapInterval(config.swap_interval);
 		// Open a window and create its OpenGL context		
 		if (!window)
 		{
@@ -169,7 +268,7 @@ int main(int argc, char* argv[])
 		int screen_width, screen_height;
 		glfwGetWindowSize(window, &screen_width, &screen_height);
 		//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
-		glfwSwapInterval(-1);
+		
 
 		// Initialize GLEW
 		glewExperimental = true; // Needed for core profile
@@ -181,8 +280,7 @@ int main(int argc, char* argv[])
 		// Ensure we can capture the escape key being pressed below
 		glfwSetInputMode(window, GLFW_STICKY_KEYS, GL_TRUE);
 		
-		// Crappy color to clearly see non-rendered areas
-		//glClearColor(0.9f, 0.9f, 0.0f, 0.0f);
+		glClearColor(0.f, 0.f, 0.0f, 1.0f);
 		
 
 		checkGLError("GLEW Initialization");		
@@ -198,15 +296,13 @@ int main(int argc, char* argv[])
 		const GLuint l2rFilterProgramID = loadProgramAndSetup(config.depth_vertex_shader, config.depth_fragment_shader, "", config);
 		glUniformMatrix4fv(glGetUniformLocation(l2rFilterProgramID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
 		glUniformMatrix4fv(glGetUniformLocation(l2rFilterProgramID, "C1C2inv"), 1, GL_FALSE, &C1C2inv[0][0]);
+		
 
 		const GLuint displayProgramID = loadProgramAndSetup(config.show_vertex_shader, config.show_fragment_shader, "", config);		
 		glUniformMatrix4fv(glGetUniformLocation(displayProgramID, "C1"), 1, GL_FALSE, &C1[0][0]);
 		const GLuint display2ProgramID = loadProgramAndSetup(config.show2_vertex_shader, config.show2_fragment_shader, "", config);		
 		checkGLError("GLSL Shader Programs loaded");
 
-
-		//GLuint layerID = glGetUniformLocation(programID, "layer");
-		//GLuint mainLayerID = glGetUniformLocation(mainProgramID, "layer");
 
 		GLuint vao;
 		glGenVertexArrays(1, &vao);
@@ -326,12 +422,10 @@ int main(int argc, char* argv[])
 		IFrameObserverPtr pObserver2(new FrameObserver(camera2, buffer2.get(), lookup2.get(), width, height));
 
 		std::unique_ptr<uint8_t[]> buffer3 = std::unique_ptr<uint8_t[]>(new uint8_t[PayloadSize*3]);
-		
-				
+						
 		setFeature(camera1, feature1, "AcquisitionMode", "Continuous");
 		setFeature(camera1, feature1, "TriggerSource", "Software");
-		setFeature(camera1, feature1, "SyncOutSource", "Imaging");
-						
+		setFeature(camera1, feature1, "SyncOutSource", "Imaging");						
 				
 		setFeature(camera2, feature2, "AcquisitionMode", "Continuous");
 		setFeature(camera2, feature2, "TriggerSource", "Line1");		
@@ -373,35 +467,19 @@ int main(int argc, char* argv[])
 		runCommand(camera1, feature1, "TriggerSoftware");		
 		time_t triggered = std::time(NULL);
 		std::cout << triggered << " Triggered Frames" << std::endl;
-		//glBindFramebuffer(GL_FRAMEBUFFER, 0);
-		//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		//glUseProgram(mainProgramID);
-		glClearColor(0.f, 0.f, 0.0f, 1.0f);
 		
 		//int layerz = 0;
 		unsigned long frameNum = 0;
+		//bool trackingMode = 0;
+		
 		while (!glfwWindowShouldClose(window) && glfwGetKey(window, GLFW_KEY_ESCAPE) != GLFW_PRESS)
 		{				
 			checkGLError("Iteration Frame 1");
 			std::cout << "GL Frame " << frameNum ++  << std::endl;
+			rt_conf.update(window);
 			
-			// Clear both framebuffers at the beginning of a frame
-			//glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
-			//glViewport(0, 0, config.frame_width, config.frame_height*2);
-			//glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);			
-			//glViewport(0, 0, config.frame_width, config.frame_height);
 
-			//glUseProgram(mainProgramID);
-
-			//glBindFramebuffer(GL_FRAMEBUFFER, 0);
-			//glViewport(0, 0, config.frame_width, config.frame_height*2);
-			
-			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			//glUseProgram(mainProgramID);
-
-
-			// wait for both frames, re-trigger if no answer for long time
+			// wait for both frames, re-trigger if no answer for a long time
 			while (!((FrameObserver*)pObserver1.get())->frame_arrived || !((FrameObserver*)pObserver2.get())->frame_arrived)
 			{
 				if (difftime(time(NULL), triggered) > 0.5)
@@ -415,13 +493,18 @@ int main(int argc, char* argv[])
 					runCommand(camera1, feature1, "TriggerSoftware");					
 					triggered = time(NULL);
 					std::cout << triggered << " Triggered Frames due to long delay" << std::endl;
+					glfwPollEvents();
 				}
 				std::this_thread::sleep_for(1ms);
 			}
 			
+			if (glfwWindowShouldClose(window) || glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+			{
+				break;
+			}
+
 			FramePtr frame1 = ((FrameObserver*)pObserver1.get())->LastFrame;
-			FramePtr frame2 = ((FrameObserver*)pObserver2.get())->LastFrame;
-			
+			FramePtr frame2 = ((FrameObserver*)pObserver2.get())->LastFrame;			
 
 			VmbUchar_t * _buffer1;
 			frame1->GetImage(_buffer1);
@@ -429,20 +512,11 @@ int main(int argc, char* argv[])
 			VmbUchar_t * _buffer2;
 			frame2->GetImage(_buffer2);
 
-			//glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, texture1ID);
-			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1920, 1080, 0, GL_RED, GL_UNSIGNED_BYTE, buffer1.get());
-			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, config.input_width, config.input_height, 0, GL_RED, GL_UNSIGNED_BYTE, buffer1.get());
-			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, config.input_width, config.input_height, 0, GL_RED, GL_UNSIGNED_BYTE, _buffer1);
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer1.get());
 			glGenerateMipmap(GL_TEXTURE_2D);
 			
-
-			//glActiveTexture(GL_TEXTURE1);
 			glBindTexture(GL_TEXTURE_2D, texture2ID);
-			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, 1920, 1080, 0, GL_RED, GL_UNSIGNED_BYTE, buffer2.get());
-			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, config.input_width, config.input_height, 0, GL_RED, GL_UNSIGNED_BYTE, buffer2.get());
-			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, config.input_width, config.input_height, 0, GL_RED, GL_UNSIGNED_BYTE, _buffer2);
 			glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, buffer2.get());
 			glGenerateMipmap(GL_TEXTURE_2D);
 			
@@ -455,8 +529,6 @@ int main(int argc, char* argv[])
 			runCommand(camera1, feature1, "TriggerSoftware");
 			triggered = time(NULL);
 			std::cout << triggered << " Triggered Frames normally" << std::endl;			
-
-
 
 			
 
@@ -556,100 +628,127 @@ int main(int argc, char* argv[])
 			glUniform1i(glGetUniformLocation(l2rFilterProgramID, "Texture1"), 0);
 			glUniform1i(glGetUniformLocation(l2rFilterProgramID, "Texture2"), 1);
 			glUniform1i(glGetUniformLocation(l2rFilterProgramID, "TextureDepth"), 2);
+			glUniform1f(glGetUniformLocation(l2rFilterProgramID, "colorThr"), rt_conf.colorThr);
+			glUniform1f(glGetUniformLocation(l2rFilterProgramID, "gradThr"), rt_conf.gradThr);			
 			
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0);
 			glDisableVertexAttribArray(0);			
 			checkGLError("Iteration Frame 3");			
 			
-			glBindTexture(GL_TEXTURE_2D, pointsTextureID);
-			glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer3.get());
-			checkGLError("glReadPixels Error");
-
-			int length = 0;
-			POINT3D average;
-			average.x = 0;
-			average.y = 0;
-			average.z = 0;
-			for (int i = 0; i < HW; i++)
+			
+			if (rt_conf.trackingMode)
 			{
-				const uint8_t d = buffer3[i * 3];
-				if (d > 0)
+				glBindTexture(GL_TEXTURE_2D, pointsTextureID);
+				glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, buffer3.get());
+				checkGLError("glReadPixels Error");
+
+				int length = 0;
+				POINT3D average;
+				average.x = 0;
+				average.y = 0;
+				average.z = 0;
+				for (int i = 0; i < HW; i++)
 				{
-					const float z = config.maxZ - (config.maxZ - config.minZ) * d / (config.layers - 1.f);
-					const float u = float(i % width);
-					const float v = float(i / width);
-					glm::vec4 xyz  = C1inv * glm::vec4(u*z, v*z, z, 1.f);
-					Points1[length].x = xyz.x / scale;
-					Points1[length].y = xyz.y / scale;
-					Points1[length].z = xyz.z / scale;
+					samples_mask[i] = 0;
+					const uint8_t d = buffer3[i * 3];
+					if (d > 0)
+					{
+						const float z = config.maxZ - (config.maxZ - config.minZ) * d / (config.layers - 1.f);
+						const float u = float(i % width);
+						const float v = float(i / width);
+						glm::vec4 xyz = C1inv * glm::vec4(u*z, v*z, z, 1.f);
+						Points1[length].x = xyz.x;
+						Points1[length].y = xyz.y;
+						Points1[length].z = xyz.z;
 
-					//average.x += xyz.x;
-					//average.y += xyz.y;
-					//average.z += xyz.z;
-					length++;
+						average.x += xyz.x;
+						average.y += xyz.y;
+						average.z += xyz.z;
+						length++;
+					}
 				}
+
+				average.x /= length;
+				average.y /= length;
+				average.z /= length;
+
+				// PLANE-FITTING (ADDITIONAL HEURISTIC)
+				std::cout << "major plane: (" << length << ") / ";
+				vec3 abc = findMajourPlane(Points1.get(), length, config.plane_threshold);
+				std::cout << " " << abc.x << " " << abc.y << " " << abc.z << " " << std::endl;
+
+				int k = 0;
+				for (int i = 0; i < length; i++)
+				{
+					const float error = abs(abc.x * Points1[i].x + abc.y * Points1[i].y + abc.z - Points1[i].z);
+					if (error <= config.scene_threshold)
+					{
+						Points1[k].x = Points1[i].x;
+						Points1[k].y = Points1[i].y;
+						Points1[k].z = Points1[i].z;
+						k++;
+					}
+				}
+				length = k;
+
+				glm::mat4 Translate = glm::mat4(1.0);
+				
+				if (length >= config.random_samples)
+				{
+#ifdef GOICP
+					#pragma omp parallel for
+					for (int i = 0; i < config.random_samples; i++)
+					{
+						int j = rand() % length;
+						randomPoints[i].x = (Points1[j].x - average.x) / scale;
+						randomPoints[i].y = (Points1[j].y - average.y) / scale;
+						randomPoints[i].z = (Points1[j].z - average.z) / scale;
+					}
+					Translate[3] = vec4(-average.x, -average.y, -average.z, 1.f);
+
+					goicp.Nd = config.random_samples;
+					cout << "Registering..." << endl;
+					clock_t clockBegin = clock();
+					goicp.Register();
+					clock_t clockEnd = clock();
+					double timea = (double)(clockEnd - clockBegin) / CLOCKS_PER_SEC;
+					//cout << "Optimal Rotation Matrix:" << endl;
+					//cout << goicp.optR << endl;
+					//cout << "Optimal Translation Vector:" << endl;
+					//cout << goicp.optT << endl;
+					cout << "Finished in " << timea << endl;
+
+					float a[] = { goicp.optR(0, 0), goicp.optR(1, 0), goicp.optR(2, 0), 0.0,  goicp.optR(0, 1), goicp.optR(1, 1), goicp.optR(2, 1), 0.f, goicp.optR(0, 2), goicp.optR(1, 2), goicp.optR(2, 2), 0.0, goicp.optT(0), goicp.optT(1), goicp.optT(2), 1.0 };					
+					Transform = glm::mat4(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12], a[13], a[14], a[15]);
+					Transform = (ScaleInv*Transform*Scale)*Translate;					
+					Transform = glm::inverse(Transform);
+
+
+#else
+#pragma omp parallel for
+					for (int i = 0; i < config.random_samples; i++)
+					{
+						int j = rand() % length;
+						randomPoints[i].x = Points1[j].x;
+						randomPoints[i].y = Points1[j].y;
+						randomPoints[i].z = Points1[j].z;
+					}
+
+					icp3d.Run((float*)Points1.get(), config.random_samples, R_icp, t_icp, size_t(config.icp_max_iter), config.icp_tresh); // data cloud, # data points, rotation matrix, translation matrix
+					Transform = glm::mat4(R_icp(0, 0), R_icp(1, 0), R_icp(2, 0), 0, R_icp(0, 1), R_icp(1, 1), R_icp(2, 1), 0, R_icp(0, 2), R_icp(1, 2), R_icp(2, 2), 0, t_icp(0), t_icp(1), t_icp(2), 1.0);
+					Transform = glm::inverse(Transform);
+
+#endif
+					
+					cout << "Found Transform:" << endl;
+					std::cout << Transform[0].x << " " << Transform[1].x << " " << Transform[2].x << " " << Transform[3].x << std::endl;
+					std::cout << Transform[0].y << " " << Transform[1].y << " " << Transform[2].y << " " << Transform[3].y << std::endl;
+					std::cout << Transform[0].z << " " << Transform[1].z << " " << Transform[2].z << " " << Transform[3].z << std::endl;
+					std::cout << Transform[0].w << " " << Transform[1].w << " " << Transform[2].w << " " << Transform[3].w << std::endl;
+				}
+
 			}
-			//glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, buffer3.get());
-
-			//average.x /= length;
-			//average.y /= length;
-			//average.z /= length;
-			//#pragma omp parallel for
-			//for (int i = 0; i < length; i++)
-			//{
-			//	Points1[i].x = (Points1[i].x - average.x) / scale;
-			//	Points1[i].y = (Points1[i].y - average.y) / scale;
-			//	Points1[i].z = (Points1[i].z - average.z) / scale;
-			//}
-			//
-			//glm::mat4 Translate = glm::mat4(1.0);
-			//Translate[3] = vec4(-average.x, -average.y, -average.z, 1.f);
-
-
-			//std::cout << "major plane: (" << length << ") / ";
-			//vec3 abc = findMajourPlane(Points1.get(), length, config.plane_threshold);
-			//std::cout << " " << abc.x << " " << abc.y << " " << abc.z << " " << std::endl;
-
-			//int k = 0;
-			//for (int i = 0; i < length; i++)
-			//{
-			//	const float error = abs(abc.x * Points1[i].x + abc.y * Points1[i].y + abc.z - Points1[i].z);
-			//	if (error <= config.scene_threshold)
-			//	{
-			//		Points1[k].x = Points1[i].x;
-			//		Points1[k].y = Points1[i].y;
-			//		Points1[k].z = Points1[i].z;
-			//		k++;
-			//	}
-			//}
-			//goicp.Nd = k;			
-			goicp.Nd = length;
-			cout << "Registering..." << endl;
-			clock_t clockBegin = clock();
-			goicp.Register();
-			clock_t clockEnd = clock();
-			double timea = (double)(clockEnd - clockBegin) / CLOCKS_PER_SEC;
-			//cout << "Optimal Rotation Matrix:" << endl;
-			//cout << goicp.optR << endl;
-			//cout << "Optimal Translation Vector:" << endl;
-			//cout << goicp.optT << endl;
-			//cout << "Finished in " << timea << endl;
-			
-			float a[] = {goicp.optR(0, 0), goicp.optR(1, 0), goicp.optR(2, 0), 0.0,  goicp.optR(0, 1), goicp.optR(1, 1), goicp.optR(2, 1), 0.f, goicp.optR(0, 2), goicp.optR(1, 2), goicp.optR(2, 2), 0.0, goicp.optT(0), goicp.optT(1), goicp.optT(2), 1.0 };
-			//float a[] = { goicp.optR(0, 0), goicp.optR(0, 1), goicp.optR(0, 2), 0.0,  goicp.optR(1, 0), goicp.optR(1, 1), goicp.optR(1, 2), 0.f, goicp.optR(2,0), goicp.optR(2,1), goicp.optR(2, 2), 0.0, goicp.optT(0), goicp.optT(1), goicp.optT(2), 1.0 };
-			glm::mat4 Transform(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9], a[10], a[11], a[12], a[13], a[14], a[15]);
-			
-			//Transform = (ScaleInv*Transform*Scale)*Translate;
-			Transform = (ScaleInv*Transform*Scale);
-			Transform = glm::inverse(Transform);
-			std::cout << Transform[0].x << " " << Transform[1].x << " " << Transform[2].x << " " << Transform[3].x << std::endl;
-			std::cout << Transform[0].y << " " << Transform[1].y << " " << Transform[2].y << " " << Transform[3].y << std::endl;
-			std::cout << Transform[0].z << " " << Transform[1].z << " " << Transform[2].z << " " << Transform[3].z << std::endl;
-			std::cout << Transform[0].w << " " << Transform[1].w << " " << Transform[2].w << " " << Transform[3].w << std::endl;
-
-
-			//glm::mat3 Transform();
-			//////////////////////  SCREEN FRAMEBUFFER DISPLAY ALIGNED MODEL
+			//////////////////////  SCREEN FRAMEBUFFER SHOW CAMERA IMAGE AND ESTIMATED POINT CLOUD (AKA SPARSE DEPTH)
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			glViewport(0, 0, config.screen_width, config.screen_height);
 			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -665,49 +764,47 @@ int main(int argc, char* argv[])
 			glUniform1i(glGetUniformLocation(display2ProgramID, "DepthTexture"), 1);
 
 			
-			//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
 			glEnableVertexAttribArray(0);
 			glBindBuffer(GL_ARRAY_BUFFER, uvbuffer);
 			glVertexAttribIPointer(0, 2, GL_INT, 0, (void*)0);
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, (void*)0);
 			glDisableVertexAttribArray(0);
 
-			glEnable(GL_BLEND); 
-			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-			//glEnable(GL_DEPTH_TEST);
-			//glBlendFunc(GL_ONE, GL_ONE);
 
 			// Enable depth test		
 			//glEnable(GL_DEPTH_TEST);
 			// Accept fragment if it closer to the camera than the former one
 			//glDepthFunc(GL_LESS);
 
-			glDisable(GL_CULL_FACE);
-			glUseProgram(displayProgramID);
-			//glViewport(0, 0, config.frame_width, config.frame_height);
+			//////////////////////  SCREEN FRAMEBUFFER DISPLAY ALIGNED MODEL
 
-			glActiveTexture(GL_TEXTURE0);
-			//glBindTexture(GL_TEXTURE_2D, texture1ID);
-			//glUniform1i(glGetUniformLocation(displayProgramID, "Texture1"), 0);
-			
-			// turn off the indexing  (it's easier for STL rendering)
-			//glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-			glEnableVertexAttribArray(0);
-			glBindBuffer(GL_ARRAY_BUFFER, modelbuffer);
-			glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+			if (rt_conf.trackingMode)
+			{
+				glEnable(GL_BLEND);
+				glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-			//glm::mat4 Transform(1,0,0,0,0,1,0,0,0,0,1,0,400,0,800,1);
-			glUniformMatrix4fv(glGetUniformLocation(displayProgramID, "C1"), 1, GL_FALSE, &C1[0][0]);
-			glUniformMatrix4fv(glGetUniformLocation(displayProgramID, "Transform"), 1, GL_FALSE, &Transform[0][0]);
-			
-			glDrawArrays(GL_TRIANGLES, 0, model_triangles*3);
+				glUseProgram(displayProgramID);
 
-			glDisableVertexAttribArray(0);
-			glDisable(GL_BLEND);
+				glActiveTexture(GL_TEXTURE0);
+
+				glEnableVertexAttribArray(0);
+				glBindBuffer(GL_ARRAY_BUFFER, modelbuffer);
+				glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, (void*)0);
+
+				//glm::mat4 Transform(1,0,0,0,0,1,0,0,0,0,1,0,400,0,800,1);
+				//Transform = C1 * Transform;
+				glUniformMatrix4fv(glGetUniformLocation(displayProgramID, "C1"), 1, GL_FALSE, &C1[0][0]);
+				glUniformMatrix4fv(glGetUniformLocation(displayProgramID, "Transform"), 1, GL_FALSE, &Transform[0][0]);
+
+				glDrawArrays(GL_TRIANGLES, 0, model_triangles * 3);
+
+				glDisableVertexAttribArray(0);
+				glDisable(GL_BLEND);
+			}
 			
 			glfwSwapBuffers(window);
 			
-			glfwPollEvents();			
+			glfwPollEvents();
 		}
 
 		glDisableVertexAttribArray(0);

@@ -87,7 +87,7 @@ int main(int argc, char* argv[])
 		//glfwWindowHint(GLFW_SAMPLES, config.fsaa);
 
 		//GLFWwindow* window = glfwCreateWindow(1024, 768, "ITER Stereo Pose Estimator", glfwGetPrimaryMonitor(), NULL);
-		GLFWwindow* window = glfwCreateWindow(config.screen_height, config.screen_width, "OpenGL Realtime Stereo Matcher", NULL, NULL);
+		GLFWwindow* window = glfwCreateWindow(config.screen_width, config.screen_height, "OpenGL Realtime Stereo Matcher", NULL, NULL);
 		
 
 		// Open a window and create its OpenGL context		
@@ -103,7 +103,7 @@ int main(int argc, char* argv[])
 		int screen_width, screen_height;
 		glfwGetWindowSize(window, &screen_width, &screen_height);
 		//glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
-		glfwSwapInterval(-1);
+		glfwSwapInterval(config.swap_interval);
 
 		// Initialize GLEW
 		glewExperimental = true; // Needed for core profile
@@ -129,8 +129,8 @@ int main(int argc, char* argv[])
 		glUniform1f(glGetUniformLocation(programID, "minZ"), config.minZ);
 		glUniform1f(glGetUniformLocation(programID, "maxZ"), config.maxZ);
 		glUniform1ui(glGetUniformLocation(programID, "layers"), config.layers);
-		glUniform1ui(glGetUniformLocation(programID, "width"), config.frame_width);
-		glUniform1ui(glGetUniformLocation(programID, "height"), config.frame_height);				
+		glUniform1ui(glGetUniformLocation(programID, "width"), width);
+		glUniform1ui(glGetUniformLocation(programID, "height"), height);				
 		glUniformMatrix4fv(glGetUniformLocation(programID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
 
 		const GLuint mainProgramID = LoadShaders(config.main_vertex_shader.c_str(), config.main_fragment_shader.c_str());
@@ -138,8 +138,8 @@ int main(int argc, char* argv[])
 		glUniform1f(glGetUniformLocation(mainProgramID, "minZ"), config.minZ);
 		glUniform1f(glGetUniformLocation(mainProgramID, "maxZ"), config.maxZ);
 		glUniform1ui(glGetUniformLocation(mainProgramID, "layers"), config.layers);
-		glUniform1ui(glGetUniformLocation(mainProgramID, "width"), config.frame_width);
-		glUniform1ui(glGetUniformLocation(mainProgramID, "height"), config.frame_height);
+		glUniform1ui(glGetUniformLocation(mainProgramID, "width"), width);
+		glUniform1ui(glGetUniformLocation(mainProgramID, "height"), height);
 		checkGLError("GLSL shader programs loading");
 
 		const GLuint showProgramID = LoadShaders(config.show_vertex_shader.c_str(), config.show_fragment_shader.c_str());
@@ -147,8 +147,8 @@ int main(int argc, char* argv[])
 		glUniform1f(glGetUniformLocation(showProgramID, "minZ"), config.minZ);
 		glUniform1f(glGetUniformLocation(showProgramID, "maxZ"), config.maxZ);
 		glUniform1ui(glGetUniformLocation(showProgramID, "layers"), config.layers);
-		glUniform1ui(glGetUniformLocation(showProgramID, "width"), config.frame_width);
-		glUniform1ui(glGetUniformLocation(showProgramID, "height"), config.frame_height);
+		glUniform1ui(glGetUniformLocation(showProgramID, "width"), width);
+		glUniform1ui(glGetUniformLocation(showProgramID, "height"), height);
 		glUniformMatrix4fv(glGetUniformLocation(showProgramID, "C2C1inv"), 1, GL_FALSE, &C2C1inv[0][0]);
 		glUniformMatrix4fv(glGetUniformLocation(showProgramID, "C1C2inv"), 1, GL_FALSE, &C1C2inv[0][0]);
 		checkGLError("GLSL shader programs loading");
@@ -182,7 +182,7 @@ int main(int argc, char* argv[])
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
 		//glTexStorage3D(GL_TEXTURE_2D_ARRAY, 10, GL_RGB32F, config.frame_width, config.frame_height, config.layers);
-		glTexStorage3D(GL_TEXTURE_2D_ARRAY, 5, GL_R8, config.frame_width, config.frame_height*2, config.layers);
+		glTexStorage3D(GL_TEXTURE_2D_ARRAY, 5, GL_R8, width, height*2, config.layers);
 		
 
 		// Set "renderedTexture" as our colour attachement #0
@@ -217,7 +217,7 @@ int main(int argc, char* argv[])
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R8, config.frame_width, config.frame_height * 2);
+		glTexStorage2D(GL_TEXTURE_2D, 1, GL_R8, width, height * 2);
 
 		// Set "renderedTexture" as our colour attachement #0
 		glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, renderedTexture2ID, 0);
@@ -236,7 +236,7 @@ int main(int argc, char* argv[])
 		// Two triangles are always the same, so can be initialized just one in advance				
 		GLuint elementbuffer, uvbuffer;
 		GLuint index_buffer[] = {0, 1, 3, 1, 2, 3};
-		GLint uv_buffer[] = {0, 0, config.frame_width, 0, config.frame_width, config.frame_height, 0, config.frame_height};
+		GLint uv_buffer[] = {0, 0, width, 0, width, height, 0, height};
 		glGenBuffers(1, &elementbuffer);
 		glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, elementbuffer);
 		glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(index_buffer), index_buffer, GL_STATIC_DRAW);
@@ -273,28 +273,28 @@ int main(int argc, char* argv[])
 		setFeature(camera1, feature1, "BinningHorizontal", config.camera_binning);
 		setFeature(camera1, feature1, "BinningVertical", config.camera_binning);
 		setFeature(camera1, feature1, "PixelFormat", "Mono8");
-		setFeature(camera1, feature1, "Width", config.frame_width);
-		setFeature(camera1, feature1, "Height", config.frame_height);
+		setFeature(camera1, feature1, "Width", width);
+		setFeature(camera1, feature1, "Height", height);
 		
 		setFeature(camera2, feature2, "BinningHorizontal", config.camera_binning);
 		setFeature(camera2, feature2, "BinningVertical", config.camera_binning);
 		setFeature(camera2, feature2, "PixelFormat", "Mono8");
-		setFeature(camera2, feature2, "Width", config.frame_width);
-		setFeature(camera2, feature2, "Height", config.frame_height);
+		setFeature(camera2, feature2, "Width", width);
+		setFeature(camera2, feature2, "Height", height);
 		
 		
 		VmbInt64_t PayloadSize = readFeature(camera1, feature1, "PayloadSize");		
 		PayloadSize = HW > PayloadSize ? HW : PayloadSize; 
 		
 		// these will be destroyed at the end of a app
-		std::unique_ptr<float[]> lookup1 = config::prepare_lookup2(camera1_pair.first, cam1_k1, cam1_k2, config.frame_width, config.frame_height);
-		std::unique_ptr<float[]> lookup2 = config::prepare_lookup2(camera2_pair.first, cam2_k1, cam2_k2, config.frame_width, config.frame_height);
+		std::unique_ptr<float[]> lookup1 = config::prepare_lookup2(camera1_pair.first, cam1_k1, cam1_k2, width, height);
+		std::unique_ptr<float[]> lookup2 = config::prepare_lookup2(camera2_pair.first, cam2_k1, cam2_k2, width, height);
 		
 
 		std::unique_ptr<VmbUchar_t[]> buffer1(new VmbUchar_t[PayloadSize*4]);
 		std::unique_ptr<VmbUchar_t[]> buffer2(new VmbUchar_t[PayloadSize*4]);		
-		IFrameObserverPtr pObserver1(new FrameObserver(camera1, buffer1.get(), lookup1.get(), config.frame_width, config.frame_height));
-		IFrameObserverPtr pObserver2(new FrameObserver(camera2, buffer2.get(), lookup2.get(), config.frame_width, config.frame_height));
+		IFrameObserverPtr pObserver1(new FrameObserver(camera1, buffer1.get(), lookup1.get(), width, height));
+		IFrameObserverPtr pObserver2(new FrameObserver(camera2, buffer2.get(), lookup2.get(), width, height));
 		
 		
 		setFeature(camera1, feature1, "AcquisitionMode", "Continuous");
@@ -429,7 +429,7 @@ int main(int argc, char* argv[])
 			glBindFramebuffer(GL_FRAMEBUFFER, framebufferID);
 			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glUseProgram(programID);
-			glViewport(0, 0, config.frame_width, config.frame_height);
+			glViewport(0, 0, width, height);
 
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, texture1ID);
@@ -477,7 +477,8 @@ int main(int argc, char* argv[])
 			glBindFramebuffer(GL_FRAMEBUFFER, 0);
 			//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 			glUseProgram(mainProgramID);			
-			glViewport(0, 0, config.screen_height, config.screen_width);
+			//glViewport(0, 0, config.screen_height, config.screen_width);
+			glViewport(0, 0, screen_width, screen_height);
 			//glViewport(0, 0, config.frame_width, config.frame_height*2);
 
 			glActiveTexture(GL_TEXTURE0);

@@ -1,4 +1,4 @@
-Building Distance Transform...19.067s (CPU)
+Building Distance Transform...18.201s (CPU)
 Compiling Vertex shader : Shaders\iter.vert
 Compiling Geometry shader : Shaders\iter.geom
 Compiling fragment shader : Shaders\iter.frag
@@ -15,14 +15,191 @@ Linking program
 Compiling vertex shader : Shaders\show2.vert
 Compiling fragment shader : Shaders\show2.frag
 Linking program
-1487854423 Triggered Frames
+1489068145 Triggered Frames
 GL Frame 0
-1487854423 Triggered Frames normally
+1489068146 Triggered Frames due to long delay
+1489068146 Triggered Frames normally
+GL Frame 1
+1489068146 Triggered Frames normally
+GL Frame 2
+1489068146 Triggered Frames normally
+GL Frame 3
+1489068146 Triggered Frames normally
+GL Frame 4
+1489068146 Triggered Frames normally
+GL Frame 5
+1489068146 Triggered Frames normally
+GL Frame 6
+1489068147 Triggered Frames normally
+GL Frame 7
+1489068147 Triggered Frames normally
+GL Frame 8
+1489068148 Triggered Frames normally
+GL Frame 9
+1489068148 Triggered Frames normally
+major plane: (12094) /  (7727)  -0.179314 -0.236541 650.541 
 Registering...
-Error*: 2048.97 (Init)
-0.999084 -0.0135249 0.040607 10.6494
-0.0154232 0.998785 -0.0468067 9.89187
--0.0399246 0.0473901 0.998078 662.819
+Error*: 5.80524 (Init)
+Iteration #0, took 0.229 sec.
+Finished in 0.229
+Found Transform:
+0.847252 0.506911 0.158764 -266.568
+-0.530707 0.820546 0.212258 -10.3827
+-0.0226771 -0.264093 0.96423 704.171
 -0 0 -0 1
-Error Occured 
-Iteration Frame 1. OpenGL Error 0x0502!
+GL Frame 10
+1489068150 Triggered Frames normally
+major plane: (12105) /  (7729)  -0.171868 -0.239102 652.281 
+Registering...
+Error*: 6.36785 (Init)
+Iteration #0, took 0.067 sec.
+Finished in 0.067
+Found Transform:
+0.988349 0.0254071 0.15007 -215.784
+-0.0534983 0.981046 0.186243 14.5146
+-0.142493 -0.192102 0.970975 692.182
+-0 0 -0 1
+GL Frame 11
+1489068150 Triggered Frames normally
+major plane: (12076) /  (7680)  -0.18334 -0.233973 649.707 
+Registering...
+Error*: 6.18408 (Init)
+Iteration #0, took 0.037 sec.
+Finished in 0.038
+Found Transform:
+0.988791 0.00350596 0.149265 -213.005
+-0.0304389 0.983462 0.17854 19.0847
+-0.146171 -0.181082 0.972545 690.775
+-0 0 -0 1
+GL Frame 12
+1489068151 Triggered Frames normally
+major plane: (12137) /  (7804)  -0.180339 -0.235491 649.884 
+Registering...
+Error*: 6.56923 (Init)
+Iteration #0, took 0.171 sec.
+Finished in 0.171
+Found Transform:
+0.851313 0.49936 0.160953 -265.565
+-0.524012 0.824491 0.213604 -10.8665
+-0.0260391 -0.266185 0.96357 703.498
+-0 0 -0 1
+GL Frame 13
+1489068151 Triggered Frames normally
+major plane: (12111) /  (7803)  -0.186412 -0.243774 648.125 
+Registering...
+Error*: 5.67782 (Init)
+Iteration #0, took 0.06 sec.
+Finished in 0.06
+Found Transform:
+0.989509 0.026277 0.142063 -219.615
+-0.0536213 0.979882 0.192242 26.8905
+-0.134153 -0.197843 0.97101 692.171
+-0 0 -0 1
+GL Frame 14
+1489068152 Triggered Frames normally
+major plane: (12171) /  (7813)  -0.187269 -0.24593 647.774 
+Registering...
+Error*: 5.87502 (Init)
+Iteration #0, took 0.058 sec.
+Finished in 0.059
+Found Transform:
+0.989066 -0.00437922 0.14741 -209.245
+-0.0235654 0.982022 0.187289 17.7452
+-0.14558 -0.188715 0.971181 691.191
+-0 0 -0 1
+GL Frame 15
+1489068152 Triggered Frames normally
+major plane: (12147) /  (7855)  -0.180933 -0.240421 648.949 
+Registering...
+Error*: 5.75709 (Init)
+Iteration #0, took 0.038 sec.
+Finished in 0.039
+Found Transform:
+0.989263 0.00891208 0.145877 -212.665
+-0.0368613 0.981085 0.190036 30.0307
+-0.141424 -0.193373 0.970879 689.925
+-0 0 -0 1
+GL Frame 16
+1489068153 Triggered Frames normally
+major plane: (12084) /  (7745)  -0.167037 -0.274766 654.607 
+Registering...
+Error*: 5.97508 (Init)
+Iteration #0, took 0.2 sec.
+Finished in 0.201
+Found Transform:
+0.850619 0.500943 0.159697 -265.227
+-0.5254 0.821425 0.221847 -10.829
+-0.0200461 -0.272612 0.961915 704.229
+-0 0 -0 1
+GL Frame 17
+1489068153 Triggered Frames normally
+major plane: (12136) /  (7786)  -0.167917 -0.260574 653.31 
+Registering...
+Error*: 5.64966 (Init)
+Iteration #0, took 0.031 sec.
+Finished in 0.031
+Found Transform:
+0.990274 -0.0104608 0.138735 -215.384
+-0.0172634 0.980225 0.197134 28.8325
+-0.138054 -0.197612 0.970511 691.964
+-0 0 -0 1
+GL Frame 18
+1489068154 Triggered Frames normally
+major plane: (12204) /  (7841)  -0.174124 -0.24353 651.164 
+Registering...
+Error*: 6.08124 (Init)
+Iteration #0, took 0.049 sec.
+Finished in 0.05
+Found Transform:
+0.988277 0.0196794 0.1514 -209.558
+-0.0482076 0.981148 0.187148 19.8206
+-0.144862 -0.192252 0.970595 690.12
+-0 0 -0 1
+GL Frame 19
+1489068154 Triggered Frames normally
+major plane: (12126) /  (7839)  -0.186213 -0.246016 647.75 
+Registering...
+Error*: 5.51195 (Init)
+Iteration #0, took 0.035 sec.
+Finished in 0.036
+Found Transform:
+0.989214 0.00679301 0.146321 -214.222
+-0.033594 0.982819 0.181488 32.0041
+-0.142574 -0.184446 0.972447 689.056
+-0 0 -0 1
+GL Frame 20
+1489068155 Triggered Frames normally
+major plane: (12093) /  (7808)  -0.168618 -0.236484 649.543 
+Registering...
+Error*: 5.56645 (Init)
+Iteration #0, took 0.057 sec.
+Finished in 0.058
+Found Transform:
+0.988398 -0.0536457 0.142096 -216.44
+0.0288401 0.984816 0.171191 23.5974
+-0.149122 -0.165107 0.974937 690.647
+-0 0 -0 1
+GL Frame 21
+1489068155 Triggered Frames normally
+major plane: (12096) /  (7716)  -0.167574 -0.267838 656.847 
+Registering...
+Error*: 4.86375 (Init)
+Iteration #0, took 0.028 sec.
+Finished in 0.028
+Found Transform:
+0.990707 0.0119602 0.135489 -217.535
+-0.0405643 0.976777 0.210385 38.8723
+-0.129827 -0.213925 0.968184 691.359
+-0 0 -0 1
+GL Frame 22
+1489068155 Triggered Frames normally
+major plane: (12116) /  (7855)  -0.168466 -0.235035 649.744 
+Registering...
+Error*: 5.48113 (Init)
+Iteration #0, took 0.041 sec.
+Finished in 0.042
+Found Transform:
+0.988801 0.0305321 0.146082 -211.743
+-0.0584275 0.979913 0.190676 34.5884
+-0.137326 -0.197076 0.970723 689.265
+-0 0 -0 1

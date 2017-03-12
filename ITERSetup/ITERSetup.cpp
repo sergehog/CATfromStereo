@@ -13,8 +13,8 @@ int main()
 	FeaturePtr feature1, feature2;
 
 
-	checkStatus(system.OpenCameraByID("169.254.0.111", VmbAccessModeFull, camera1));
-	checkStatus(system.OpenCameraByID("169.254.0.113", VmbAccessModeFull, camera2));
+	checkStatus(system.OpenCameraByID("192.168.0.111", VmbAccessModeFull, camera1));
+	checkStatus(system.OpenCameraByID("192.168.0.113", VmbAccessModeFull, camera2));
 
 
 	setFeature(camera1, feature1, "BinningHorizontal", 2);

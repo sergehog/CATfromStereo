@@ -18,5 +18,5 @@ void main()
 	//float d = float(gl_InstanceID)/float(layers); 
 	//float dx = float(layer)/float(layers); 			
 	
-	gl_Position = vec4(1.0-2.0*UV.y, 1.0-2.0*UV.x, 0.0, 1.0);
+	gl_Position = vec4(1.0-2.0*UV.x, 1.0-2.0*UV.y, 0.0, 1.0);
 }

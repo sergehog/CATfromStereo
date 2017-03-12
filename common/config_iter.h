@@ -27,13 +27,23 @@
 	CONFIG_PARAM(float, minZ, "config.minZ") \
 	CONFIG_PARAM(float, maxZ, "config.maxZ") \
 	CONFIG_PARAM(int, layers, "config.layers") \
-	CONFIG_PARAM_OPTIONAL(unsigned, screen_width, "config.screen_width", input_width) \
-	CONFIG_PARAM_OPTIONAL(unsigned, screen_height, "config.screen_height", input_height) \
-	CONFIG_PARAM_OPTIONAL(unsigned, buffer_frame_number, "config.buffer_frame_number", 2) \
+	CONFIG_PARAM_OPTIONAL(unsigned, icp_max_iter, "config.icp_max_iter", 1000) \
+	CONFIG_PARAM_OPTIONAL(float, icp_scale, "config.icp_scale", 500) \
+	CONFIG_PARAM_OPTIONAL(float, icp_trim, "config.icp_trim", 0.01) \
+	CONFIG_PARAM_OPTIONAL(float, icp_tresh, "config.icp_tresh", 1.0) \
+	CONFIG_PARAM_OPTIONAL(float, ltrThr, "config.ltrThr", 0.007) \
+	CONFIG_PARAM_OPTIONAL(float, colorThr, "config.colorThr", 0.1f) \
+	CONFIG_PARAM_OPTIONAL(float, gradThr, "config.gradThr", 0.2f) \
+	CONFIG_PARAM_OPTIONAL(unsigned, random_samples, "config.random_samples", 3000) \
 	CONFIG_PARAM_OPTIONAL(float, param1, "config.param1", 0.f) \
 	CONFIG_PARAM_OPTIONAL(float, param2, "config.param2", 0.f) \
 	CONFIG_PARAM_OPTIONAL(float, plane_threshold, "config.plane_threshold", 20.f) \
-	CONFIG_PARAM_OPTIONAL(float, scene_threshold, "config.plane_threshold", 200.f) \
+	CONFIG_PARAM_OPTIONAL(float, scene_threshold, "config.scene_threshold", 40.f) \
+	CONFIG_PARAM_OPTIONAL(unsigned, screen_width, "config.screen_width", input_width) \
+	CONFIG_PARAM_OPTIONAL(unsigned, screen_height, "config.screen_height", input_height) \
+	CONFIG_PARAM_OPTIONAL(bool, full_screen, "config.full_screen", false) \
+	CONFIG_PARAM_OPTIONAL(unsigned, buffer_frame_number, "config.buffer_frame_number", 2) \
+	CONFIG_PARAM_OPTIONAL(int, swap_interval, "config.swap_interval", -1) \
 	CONFIG_PARAM(string, vertex_shader, "config.vertex_shader") \
 	CONFIG_PARAM(string, fragment_shader, "config.fragment_shader") \
 	CONFIG_PARAM_OPTIONAL(string, geometry_shader, "config.geometry_shader", "") \

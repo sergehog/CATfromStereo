@@ -14,6 +14,11 @@ uniform uint layers;
 uniform uint width;
 uniform uint height;
 
+uniform float ltrThr;
+uniform float colorThr;
+uniform float gradThr;
+
+
 // Ouput data
 out vec3 colorOut;
 
@@ -68,7 +73,7 @@ void main()
 	//colorOut = vec3(d2, d2, d2);
 	//return;
 	
-	if(abs(d1-d2) < 0.02 && grad > 0.1 && color.r > 0.02)
+	if(abs(d1-d2) < ltrThr && grad > gradThr && color.r > colorThr)
 	{		
 		float d = (d1 + d2)/2;
 		colorOut = vec3(d, d, d);
